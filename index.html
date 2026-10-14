@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e1e14">
+<meta name="description" content="Simulador de golf del Golfito La Huerta, Puebla">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Golfito">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Golfito La Huerta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500&display=swap">
+<style>
+/* Layout: lienzo 3D a pantalla completa con marcador estilo tablero de club en la parte superior y botonera de golpe abajo */
+:root {
+  --ink: #f4f0e2;          /* texto crema */
+  --ink-dim: #c9c6b4;
+  --panel: rgba(14, 30, 20, 0.78);   /* vidrio verde bosque */
+  --panel-edge: rgba(244, 240, 226, 0.14);
+  --flag: #f2c230;         /* amarillo bandera */
+  --danger: #e0583a;
+  --good: #8fd16a;
+  --bg: #0e1e14;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+#game { position: fixed; inset: 0; }
+#c { display: block; width: 100%; height: 100%; }
+.hud { position: fixed; left: 0; right: 0; display: flex; gap: 10px; padding-inline: 12px; pointer-events: none; }
+.hud.top { top: 0; padding-top: calc(env(safe-area-inset-top, 0px) + 10px); justify-content: space-between; align-items: flex-start; }
+.card { background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px; padding: 8px 12px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+[hidden] { display: none !important; }
+.score { display: grid; grid-template-columns: repeat(3, auto); column-gap: 16px; row-gap: 2px; }
+.score .sub { grid-column: 1 / -1; margin-bottom: 4px; }
+.stat { display: flex; flex-direction: column; min-width: 0; white-space: nowrap; }
+.score .name { grid-column: 1 / -1; font-family: var(--f-display); font-weight: 700; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--flag); }
+.lbl { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim); }
+.val { font-family: var(--f-display); font-weight: 600; font-size: 20px; font-variant-numeric: tabular-nums; }
+.wind { display: flex; gap: 10px; align-items: center; }
+.wind svg { width: 34px; height: 34px; transition: transform .3s; }
+.right-col { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+#map { width: 96px; height: 180px; border-radius: 8px; border: 1px solid var(--panel-edge); background: var(--panel); }
+.hud.bottom { bottom: 0; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); flex-direction: column; align-items: center; }
+.controls { pointer-events: auto; display: flex; flex-direction: column; gap: 8px; width: min(520px, 100%); }
+.row { display: flex; gap: 8px; align-items: stretch; }
+.club { flex: 1; display: flex; align-items: center; gap: 4px; padding: 4px; }
+.club .mid { flex: 1; text-align: center; min-width: 0; }
+.club .mid .val { font-size: 22px; line-height: 1.1; }
+button { font: inherit; color: var(--ink); background: transparent; border: 0; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
+.arrow { width: 40px; height: 44px; border-radius: 8px; font-size: 22px; background: rgba(244,240,226,.08); }
+.arrow:active { background: rgba(244,240,226,.18); }
+#swing { flex: 0 0 132px; border-radius: 10px; background: var(--flag); color: #1b1a12; font-family: var(--f-display); font-weight: 700; font-size: 20px; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 2px 0 #9c7a12; }
+#swing:active { transform: translateY(2px); box-shadow: none; }
+#swing:disabled { opacity: .45; }
+.meter { position: relative; height: 26px; padding: 0; overflow: hidden; }
+.meter .track { position: absolute; inset: 5px 8px; border-radius: 4px; background: linear-gradient(90deg, rgba(244,240,226,.12), rgba(242,194,48,.55) 85%, var(--danger)); }
+.meter .acc { position: absolute; top: 2px; bottom: 2px; width: 8px; margin-left: -4px; background: var(--good); border-radius: 2px; }
+.meter .pw { position: absolute; top: 2px; bottom: 2px; width: 3px; margin-left: -1px; background: var(--ink); opacity: 0; }
+.meter .mk { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 6px #fff; border-radius: 2px; }
+.meter .read { position: absolute; right: 12px; top: 3px; font-family: var(--f-display); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
+#toast { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); padding: 10px 18px; font-family: var(--f-display); font-weight: 600; font-size: 18px; text-align: center; pointer-events: none; transition: opacity .3s; max-width: calc(100% - 32px); }
+#hint { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 200px); transform: translateX(-50%); font-size: 13px; color: var(--ink); text-align: center; pointer-events: none; max-width: calc(100% - 32px); text-shadow: 0 1px 3px #000; }
+#overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8, 16, 10, .6); padding-inline: 16px; overflow-y: auto; }
+#overlay .card { padding: 22px 22px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; width: min(440px, 100%); }
+#overlay h2 { margin: 0; font-family: var(--f-display); font-size: 40px; font-weight: 700; letter-spacing: .04em; color: var(--flag); text-wrap: balance; line-height: 1.05; }
+#overlay p { margin: 0; color: var(--ink-dim); max-width: 34ch; }
+.primary { margin-top: 4px; padding: 10px 22px; border-radius: 8px; background: var(--flag); color: #1b1a12; font-family: var(--f-display); font-weight: 700; font-size: 18px; letter-spacing: .06em; text-transform: uppercase; }
+.tees { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.tee-btn { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-edge); font-family: var(--f-display); font-weight: 600; font-size: 16px; }
+.tee-btn[aria-pressed="true"] { border-color: var(--flag); background: rgba(242,194,48,.14); }
+.tee-btn i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.4); }
+.tee-btn small { font-family: var(--f-body); font-weight: 400; color: var(--ink-dim); font-size: 12px; }
+.sc-wrap { width: 100%; overflow-x: auto; }
+#courseMap { width: min(260px, 100%); aspect-ratio: 13 / 10; border-radius: 8px; border: 1px solid var(--panel-edge); }
+table.sc { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; margin-inline: auto; }
+table.sc th, table.sc td { padding: 4px 6px; text-align: center; border-bottom: 1px solid var(--panel-edge); }
+table.sc th { font-weight: 500; color: var(--ink-dim); text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+table.sc tr.hd td { background: rgba(244,240,226,.06); font-weight: 600; }
+table.sc td.cur { outline: 1px solid var(--flag); }
+table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
+@media (max-width: 420px) { .val { font-size: 17px; } #map { width: 74px; height: 140px; } #swing { flex-basis: 108px; font-size: 17px; } table.sc th, table.sc td { padding: 3px 3px; } table.sc { font-size: 12px; } #overlay .card { padding: 16px 12px; } }
+@media (prefers-reduced-motion: reduce) { .wind svg { transition: none; } }
+</style>
+</head>
+<body>
+
+
+<div id="game">
+  <canvas id="c" aria-label="Campo de golf en 3D"></canvas>
+
+  <div class="hud top">
+    <div class="card score" aria-live="polite">
+      <div class="name" id="holeName">Golfito La Huerta · Hoyo 1</div>
+      <div class="sub lbl" id="holeSub">Par 4 · 257 yd · Ventaja 4</div>
+      <div class="stat"><span class="lbl">Al hoyo</span><span class="val" id="dist">—</span></div>
+      <div class="stat"><span class="lbl">Golpes</span><span class="val" id="strokes">0</span></div>
+      <div class="stat"><span class="lbl">Bola en</span><span class="val" id="lie">Tee</span></div>
+    </div>
+    <div class="right-col">
+      <div class="card wind">
+        <svg viewBox="0 0 34 34" id="windArrow" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="none" stroke="rgba(244,240,226,.25)"/><path d="M17 5 L24 16 H19.5 V29 H14.5 V16 H10 Z" fill="#f2c230"/></svg>
+        <div><div class="val" id="windSpd">0</div><div class="lbl" id="windLbl">viento m/s</div></div>
+      </div>
+      <canvas id="map" width="192" height="360" aria-label="Mapa del hoyo"></canvas>
+    </div>
+  </div>
+
+  <div id="toast" class="card" style="opacity:0"></div>
+  <div id="hint">Arrastra para apuntar · Pulsa GOLPEAR tres veces: iniciar, potencia y precisión</div>
+
+  <div class="hud bottom">
+    <div class="controls">
+      <div class="card meter" id="meter">
+        <div class="track"></div>
+        <div class="acc" id="accZone"></div>
+        <div class="pw" id="pwMark"></div>
+        <div class="mk" id="marker"></div>
+        <div class="read" id="meterRead"></div>
+      </div>
+      <div class="row">
+        <div class="card club">
+          <button class="arrow" id="clubPrev" aria-label="Palo anterior">‹</button>
+          <div class="mid"><div class="val" id="clubName">Driver</div><div class="lbl" id="clubRange">vuelo ≈ 250 yd</div></div>
+          <button class="arrow" id="clubNext" aria-label="Palo siguiente">›</button>
+        </div>
+        <button id="swing">Golpear</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div class="card" id="ovCard">
+      <div class="lbl" id="ovEyebrow">Golf &amp; Hotel La Huerta · Puebla · 2158 m</div>
+      <h2 id="ovTitle">Golfito La Huerta</h2>
+      <p id="ovText">9 hoyos · par 29. Elige tus salidas.</p>
+      <div class="tees" id="teePick">
+        <button class="tee-btn" data-tee="0" aria-pressed="false"><i style="background:#d23a2a"></i>Rojas <small>1216 yd</small></button>
+        <button class="tee-btn" data-tee="1" aria-pressed="true"><i style="background:#f4f4f4"></i>Blancas <small>1294 yd</small></button>
+        <button class="tee-btn" data-tee="2" aria-pressed="false"><i style="background:#2c5fd0"></i>Azules <small>1409 yd</small></button>
+      </div>
+      <canvas id="courseMap" width="520" height="400" aria-label="Mapa del campo con los 9 hoyos"></canvas>
+      <div class="sc-wrap" id="scWrap" hidden></div>
+      <button class="primary" id="ovBtn">Empezar</button>
+    </div>
+  </div>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+(() => {
+'use strict';
+// ───────────────────────── Constantes físicas (SI) ─────────────────────────
+// Densidad del aire en La Huerta (Puebla, ≈ 2158 m, ≈ 20 °C): ≈ 0,93 kg/m³ frente a 1,225 a nivel del mar.
+const G = 9.81, RHO = 0.93, BR = 0.021335, BM = 0.04593, BA = Math.PI * BR * BR;
+const CUP_R = 0.054, YD = 1.0936133;
+// Superficies: rebote (e), fricción de deslizamiento (mu), resistencia a la rodadura (roll)
+const SURF = {
+  TEE:     { name: 'Tee',     e: 0.50, mu: 0.50, roll: 0.16 },
+  FAIRWAY: { name: 'Calle',   e: 0.48, mu: 0.50, roll: 0.15 },
+  ROUGH:   { name: 'Rough',   e: 0.30, mu: 0.70, roll: 0.38 },
+  BUNKER:  { name: 'Búnker',  e: 0.07, mu: 0.90, roll: 0.75 },
+  GREEN:   { name: 'Green',   e: 0.40, mu: 0.55, roll: 0.058 },
+  FRINGE:  { name: 'Antegreen', e: 0.44, mu: 0.50, roll: 0.10 },
+  WATER:   { name: 'Agua' },
+  OB:      { name: 'Fuera de límites' },
+};
+// Palos: velocidad de bola máxima (m/s), ángulo de salida (°), giro (rpm)
+const CLUBS = [
+  { name: 'Driver',    v: 70.0, la: 11.5, rpm: 2700 },
+  { name: 'Madera 3',  v: 65.5, la: 10.5, rpm: 3600 },
+  { name: 'Híbrido 4', v: 60.0, la: 12.5, rpm: 4500 },
+  { name: 'Hierro 5',  v: 56.5, la: 12.5, rpm: 5300 },
+  { name: 'Hierro 6',  v: 53.5, la: 14.0, rpm: 6200 },
+  { name: 'Hierro 7',  v: 50.5, la: 16.3, rpm: 7000 },
+  { name: 'Hierro 8',  v: 48.0, la: 18.0, rpm: 7900 },
+  { name: 'Hierro 9',  v: 45.5, la: 20.5, rpm: 8600 },
+  { name: 'Wedge PW',  v: 42.5, la: 24.0, rpm: 9300 },
+  { name: 'Wedge SW',  v: 34.0, la: 31.0, rpm: 10000 },
+  { name: 'Putter',    v: 6.5,  la: 0,    rpm: 0, putter: true },
+];
+
+// ───────────────────────── Golfito La Huerta: datos de la tarjeta ─────────────────────────
+// Distancias en yardas por salida [rojas, blancas, azules], par y ventaja según la tarjeta oficial.
+// La forma de cada hoyo (curva, búnkeres, agua) es provisional hasta tener el trazado real.
+// Obstáculos: g = junto al green (dx a la derecha, dz hacia el fondo, en metros); s = en la calle (fracción del recorrido, off lateral).
+const TEESETS = [{ name: 'Rojas', color: 0xd23a2a }, { name: 'Blancas', color: 0xf4f4f4 }, { name: 'Azules', color: 0x2c5fd0 }];
+const HOLES = [
+  { par: 4, hcp: 4,  yd: [250, 257, 265], pin: [-2, 3], slope: [0.006, 0.02],
+    // Hoyo 1 (según Enrique): "El Abuelo", árbol enorme a ~80 yd del green a la derecha de la calle (la foto lo muestra casi sobre la línea de juego);
+    // búnker centrado delante del green, con pasos estrechos a izquierda y derecha para entrar rodando.
+    landmarks: [{ name: 'El Abuelo', toGreen: 80, off: 6, h: 19, r: 6.5 }],
+    bunkers: [{ g: 1, dx: 0, dz: -19.5, rx: 8.5, rz: 3.2 }] },
+  // Hoyo 2 (según Enrique y su foto): salida muy estrecha entre árboles; green ancho y poco profundo,
+  // búnker delante; si te pasas, una caída fuerte detrás del green aleja la bola.
+  { par: 3, hcp: 16, yd: [78, 84, 97], pin: [-3, 1], slope: [-0.01, 0.02], green: [13, 8.5], wide: 7.5, backDrop: 4,
+    bunkers: [{ g: 1, dx: 3, dz: -12, rx: 8, rz: 3 }] },
+  // Hoyo 3 (según Enrique y su foto): lago delante del green que tapa casi toda la entrada; solo queda
+  // un paso de ~1,5 m a la derecha para llegar rodando, y más a la derecha están los árboles que lo separan del 1.
+  { par: 3, hcp: 6,  yd: [116, 124, 136], pin: [0, 1], slope: [0.008, 0.018], green: [9.5, 8.5], wide: 6,
+    ponds: [{ g: 1, dx: -3.5, dz: -20, rx: 9, rz: 7.5 }] },
+  // Hoyo 4 (según Enrique y su foto): sales de una pequeña meseta; un lago ancho cubre todo el frente
+  // y hay que cruzarlo por fuerza; el green empieza unos 2 m después del agua. Detrás del green, un búnker
+  // metido en una pendiente que sube (backDrop negativo = subida), del que cuesta salir.
+  { par: 3, hcp: 18, yd: [67, 72, 87], pin: [0, 1], slope: [0, 0.02], green: [9, 7], teeRise: 2.5, backDrop: -2.5,
+    ponds: [{ g: 1, dx: 0, dz: -24, rx: 22, rz: 15 }], bunkers: [{ g: 1, dx: 0, dz: 11, rx: 7, rz: 3 }] },
+  // Hoyo 5 (según Enrique y su foto): el lago que comparte con el 3 está justo delante del tee (solo lo
+  // encuentra un golpe muy corto); búnker delante del green que obliga a volarlo, otro pequeño a la
+  // izquierda, y a la derecha del green una pendiente que baja si no te quedas arriba.
+  { par: 3, hcp: 12, yd: [95, 104, 115], pin: [-1, 1], slope: [-0.01, 0.015], green: [9, 10], rightDrop: 2,
+    ponds: [{ fromTee: 0, off: 14, rx: 7, rz: 9 }],
+    bunkers: [{ g: 1, dx: -2, dz: -14, rx: 8, rz: 3.5 }, { g: 1, dx: -11.5, dz: 2, rx: 2.5, rz: 4 }] },
+  // Hoyo 6 (según Enrique y su foto): dogleg a la derecha con calle entre árboles a ambos lados; pasada la
+  // línea de árboles es fuera de límites. Desde el quiebre, un lago a la derecha de la línea tapa casi todo:
+  // solo quedan 3-4 m por la izquierda antes de los árboles, aunque lo normal es volarlo. Tras el lago, calle
+  // (antes era un búnker enorme). Green que sube de la entrada al fondo; 5-6 m detrás ya es fuera de límites.
+  { par: 4, hcp: 2,  yd: [316, 326, 336], pin: [0, 2], slope: [0.005, 0.035], wide: 12, ob: 22, backOB: 5.5,
+    ponds: [{ afterCorner: 16, off: 4, rx: 12, rz: 10 }],
+    landmarks: [30, 38, 46, 54, 62].map((y, k) => ({ toGreen: y, off: -7 - (k % 2), h: 12 + k, r: 3.2 })) },
+  // Hoyo 7 (según Enrique y su foto): estrecho, sales de una pequeña meseta; búnker delante y otro a la
+  // izquierda del green; green que sube de la entrada al fondo con una pequeña caída detrás; a la derecha
+  // del green el terreno cae hacia los árboles y el fuera de límites, que está en el límite del arbolado.
+  { par: 3, hcp: 10, yd: [92, 108, 118], pin: [-1, 2], slope: [0, 0.03], green: [9, 11], wide: 8, teeRise: 2,
+    backDrop: 1.2, rightDrop: 3, obRight: 15,
+    bunkers: [{ g: 1, dx: 2, dz: -14, rx: 6, rz: 3 }, { g: 1, dx: -11.5, dz: 3, rx: 3, rz: 4.5 }] },
+  // Hoyo 8 (según Enrique y su foto): salida escondida; árboles que se meten en la calle por la izquierda
+  // y una palmera a la derecha obligan a tirar muy recto; búnker a cada lado del green; green que sube de
+  // la entrada al fondo y, si te pasas, una caída importante.
+  { par: 3, hcp: 14, yd: [90, 97, 116], pin: [1, 2], slope: [0, 0.03], green: [10, 10], wide: 9, backDrop: 3,
+    landmarks: [{ toGreen: 78, off: -5, h: 13, r: 4 }, { toGreen: 68, off: -4.5, h: 15, r: 4.5 }, { toGreen: 58, off: -6, h: 12, r: 3.5 },
+                { name: 'Palmera', palm: true, toGreen: 62, off: 4.5, h: 11, r: 2.4 }],
+    bunkers: [{ g: 1, dx: 13.5, dz: 1, rx: 4, rz: 6 }, { g: 1, dx: -12.5, dz: -1, rx: 3, rz: 5 }] },
+  // Hoyo 9 (según Enrique y su foto): salida muy estrecha; a la derecha árboles y una palmera muy metida en
+  // la calle, a la izquierda árboles y el techo de la nave del pádel; pasado el pádel la calle se abre.
+  // Green en una pequeña meseta que cae a derecha, izquierda y fondo; búnker delante y otro a la izquierda,
+  // ambos a ~1 m del green.
+  // A la izquierda de la salida de blancas hay un jardín de eventos (claro sin árboles) y después el pádel.
+  { par: 3, hcp: 8,  yd: [112, 122, 139], pin: [0, 1], slope: [0, 0.015], green: [9, 10], rise: 2,
+    wide: 5.5, wideAfter: [50, 12], fwFrom: 50, leftDrop: 2.3, rightDrop: 2.3, backDrop: 2.3,
+    landmarks: [{ name: 'Palmera', palm: true, fromTee: 26, off: 3, h: 10, r: 2.4 }],
+    clearings: [{ fromTee: 2, off: -11, w: 12, l: 14 }],
+    buildings: [{ name: 'pádel', fromTee: 27, off: -11.5, w: 10, l: 20, h: 6.5 }],
+    bunkers: [{ g: 1, dx: 0, dz: -14, rx: 6, rz: 3 }, { g: 1, dx: -13, dz: 0, rx: 3, rz: 5 }] },
+];
+const PAR_TOTAL = HOLES.reduce((a, h) => a + h.par, 0);
+// Centros de green reales (aportados por Enrique). Los tees se estiman: cada hoyo sale cerca del green anterior,
+// a la distancia de la tarjeta (salidas blancas). Si se consiguen las coordenadas reales de los tees, van en TEES_LL.
+const GREENS_LL = [
+  [19.0601039, -98.3301499], [19.0598427, -98.3300061], [19.058892, -98.3310967],
+  [19.058652, -98.3307404], [19.0596076, -98.3300105], [19.0585069, -98.3313680],
+  [19.059541, -98.3316322], [19.0597324, -98.3309748], [19.0588899, -98.3317317],
+];
+// Salidas reales (aportadas por Enrique, convertidas de grados-minutos-segundos)
+const TEES_LL = [
+  [19.0586056, -98.3318167], [19.0603250, -98.3295528], [19.0597611, -98.3302500],
+  [19.0586750, -98.3314750], [19.0589667, -98.3305028], [19.0599111, -98.3296778],
+  [19.0587056, -98.3321333], [19.0602500, -98.3303611], [19.0599278, -98.3311056],
+];
+// Puntos de quiebre de los doglegs (aportados por Enrique)
+const CORNERS_LL = { 5: [19.0583248, -98.33006978] };
+const ORIGIN = [19.0592, -98.3309];
+const toEN = ([lat, lng]) => ({ e: (lng - ORIGIN[1]) * 111320 * Math.cos(ORIGIN[0] * Math.PI / 180), n: (lat - ORIGIN[0]) * 110574 });
+const COURSE = HOLES.map((h, i) => {
+  const g = toEN(GREENS_LL[i]), pg = toEN(GREENS_LL[(i + HOLES.length - 1) % HOLES.length]), L = h.yd[1] / 1.0936133;
+  let t;
+  if (TEES_LL[i]) t = toEN(TEES_LL[i]);
+  else { const dx = pg.e - g.e, dn = pg.n - g.n, d = Math.hypot(dx, dn); t = { e: g.e + dx / d * L, n: g.n + dn / d * L }; }
+  // D = distancia recta real tee→green. Si la tarjeta mide bastante más en un par 4, el hoyo es un dogleg:
+  // se busca la curva que da a la vez el recorrido de la tarjeta (P) y la distancia recta real (D).
+  const D = Math.hypot(g.e - t.e, g.n - t.n), P = h.yd[1] / 1.0936133;
+  let len = D, bend = 0, phi = 0;
+  if (CORNERS_LL[i]) {
+    // Dogleg real: primera parte tee→quiebre, segunda quiebre→green, en el marco local del hoyo
+    const c = toEN(CORNERS_LL[i]), B = Math.atan2(c.e - t.e, c.n - t.n), a = Math.hypot(c.e - t.e, c.n - t.n);
+    const dE = g.e - t.e, dN = g.n - t.n;
+    const gLocal = { x: dE * Math.cos(B) - dN * Math.sin(B), z: -(dE * Math.sin(B) + dN * Math.cos(B)) };
+    return { tee: t, green: g, corner: c, bearing: B, len: a + Math.hypot(g.e - c.e, g.n - c.n), bend: gLocal.x, legA: a, gLocal, real: D };
+  }
+  if (h.par >= 4 && P > D + 8) {
+    const s1 = P * 0.62, s2 = P - s1, direct = b => Math.hypot(b, s1 + Math.sqrt(s2 * s2 - b * b));
+    let lo = 0, hi = s2 * 0.999;
+    for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (direct(m) > D) lo = m; else hi = m; }
+    bend = (h.dogleg || 1) * lo; len = P;
+    phi = Math.atan2(bend, s1 + Math.sqrt(s2 * s2 - lo * lo));
+  }
+  const direct = Math.atan2(g.e - t.e, g.n - t.n);
+  // rumbo: radianes desde el norte, sentido horario, de la primera parte del hoyo
+  const bearing = direct - phi, a = P * 0.62;
+  const corner = bend ? { e: t.e + Math.sin(bearing) * a, n: t.n + Math.cos(bearing) * a } : null;
+  return { tee: t, green: g, corner, bearing, len, bend, real: D };
+});
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+const compass = a => COMPASS[Math.round(((a % (2 * Math.PI)) + 2 * Math.PI) / (Math.PI / 4)) % 8];
+const SUN_AZ = 245 * Math.PI / 180; // sol de tarde, al oeste-suroeste
+
+const ss = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+const ell = (o, x, z) => Math.hypot((x - o.x) / o.rx, (z - o.z) / o.rz);
+
+// Geometría del hoyo activo (se reconstruye en buildHole)
+let LANDMARKS = [], BUILDINGS = [], CLEARINGS = [], CENTER, GREEN, PIN, PONDS, BUNKERS, TEES, HOLE, GF, GR, BOUNDS, GREEN_H, PIN_Y, holeSpec;
+
+function centerInfo(x, z) {
+  let best = 1e9, bestS = 0, acc = 0;
+  for (let i = 0; i < CENTER.length - 1; i++) {
+    const [ax, az] = CENTER[i], [bx, bz] = CENTER[i + 1];
+    const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz, L = Math.sqrt(L2);
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+    const d = Math.hypot(x - ax - t * dx, z - az - t * dz);
+    if (d < best) { best = d; bestS = acc + t * L; }
+    acc += L;
+  }
+  return { d: best, s: bestS };
+}
+function pointAt(s, off = 0) {
+  let acc = 0;
+  for (let i = 0; i < CENTER.length - 1; i++) {
+    const [ax, az] = CENTER[i], [bx, bz] = CENTER[i + 1], L = Math.hypot(bx - ax, bz - az);
+    if (s <= acc + L || i === CENTER.length - 2) {
+      const t = Math.min(1, (s - acc) / L), fx = (bx - ax) / L, fz = (bz - az) / L;
+      return { x: ax + fx * L * t - fz * off, z: az + fz * L * t + fx * off };
+    }
+    acc += L;
+  }
+}
+function baseH(x, z) {
+  // El campo es casi plano (≈ 2,6 m de desnivel en todo el terreno según el KML)
+  return 0.55 * Math.sin(x * 0.031 + 1.3) * Math.cos(z * 0.021) + 0.35 * Math.sin(z * 0.047 + x * 0.019) + 0.15 * Math.sin(x * 0.11) * Math.sin(z * 0.09);
+}
+function greenLocal(x, z) { const dx = x - GREEN.x, dz = z - GREEN.z; return [dx * GR.x + dz * GR.z, dx * GF.x + dz * GF.z]; }
+function greenPlane(x, z) {
+  const [lx, lz] = greenLocal(x, z), sl = holeSpec.slope;
+  return GREEN_H + sl[0] * lx + sl[1] * lz + 0.2 * Math.exp(-((lx + 3) ** 2 + (lz - 4) ** 2) / 25);
+}
+function H(x, z) {
+  const c = centerInfo(x, z);
+  let h = baseH(x, z) + Math.min(3.5, 0.0016 * Math.max(0, c.d - HOLE.wide - 8) ** 2);
+  h += (holeSpec.rise || 0) * ss(HOLE.sTee + HOLE.L * 0.6, HOLE.sTee + HOLE.L - 8, c.s);
+  const gd = ell(GREEN, x, z);
+  if (gd < 1.8) h += (greenPlane(x, z) - h) * (1 - ss(1.0, 1.8, gd));
+  if (holeSpec.leftDrop) { const lx = greenLocal(x, z)[0]; if (lx < -GREEN.rx) h -= holeSpec.leftDrop * ss(GREEN.rx * 1.05, GREEN.rx + 10, -lx); }
+  if (holeSpec.rightDrop) { const lx = greenLocal(x, z)[0]; if (lx > GREEN.rx) h -= holeSpec.rightDrop * ss(GREEN.rx * 1.05, GREEN.rx + 10, lx); }
+  if (holeSpec.backDrop) { const lz = greenLocal(x, z)[1]; if (lz > GREEN.rz) h -= holeSpec.backDrop * ss(GREEN.rz * 1.1, GREEN.rz + 16, lz); }
+  if (holeSpec.teeRise) { // meseta de salida
+    const dt = Math.min(...TEES.map(t => Math.hypot(x - t.x, z - t.z)));
+    h += holeSpec.teeRise * (1 - ss(8, 22, dt));
+  }
+  for (const t of TEES) {
+    const td = Math.max(Math.abs(x - t.x) / 3.5, Math.abs(z - t.z) / 5);
+    if (td < 1.8) h += (t.h - h) * (1 - ss(1.0, 1.8, td));
+  }
+  for (const b of BUNKERS) {
+    const e = ell(b, x, z);
+    if (e < 1.4) h += -b.depth * (1 - ss(0.6, 1.0, e)) + 0.25 * Math.exp(-(((e - 1.08) / 0.09) ** 2));
+  }
+  for (const p of PONDS) {
+    const pe = ell(p, x, z);
+    if (pe < 1.4) h += (p.y - 1.2 - h) * (1 - ss(0.85, 1.3, pe));
+  }
+  return h;
+}
+function surfAt(x, z) {
+  if (x < BOUNDS.x0 || x > BOUNDS.x1 || z > BOUNDS.z0 || z < BOUNDS.z1) return SURF.OB;
+  const c = centerInfo(x, z);
+  if (c.d > HOLE.ob) return SURF.OB;
+  if (holeSpec.obRight && x > holeSpec.obRight) return SURF.OB; // hoyos rectos: x local = lateral
+  for (const p of PONDS) if (ell(p, x, z) < 1) return SURF.WATER;
+  for (const b of BUNKERS) if (ell(b, x, z) < 1) return SURF.BUNKER;
+  const gd = ell(GREEN, x, z);
+  if (holeSpec.backOB && greenLocal(x, z)[1] > GREEN.rz + holeSpec.backOB) return SURF.OB;
+  if (gd < 1) return SURF.GREEN;
+  if (gd < 1.12) return SURF.FRINGE;
+  for (const t of TEES) if (Math.abs(x - t.x) < 3 && Math.abs(z - t.z) < 4) return SURF.TEE;
+  if (c.s > HOLE.fwStart && c.d < HOLE.fwHalf(c.s)) return SURF.FAIRWAY;
+  return SURF.ROUGH;
+}
+function normalAt(x, z) {
+  const e = 0.15;
+  const nx = H(x - e, z) - H(x + e, z), nz = H(x, z - e) - H(x, z + e);
+  return new THREE.Vector3(nx, 2 * e, nz).normalize();
+}
+
+// Construye la geometría lógica de un hoyo a partir de su ficha
+function defineHole(i, teeSet) {
+  holeSpec = HOLES[i];
+  const L = COURSE[i].len, b = COURSE[i].bend;
+  const back = Math.max(0, (holeSpec.yd[2] - holeSpec.yd[1]) / YD) + 8;
+  if (COURSE[i].gLocal) {
+    const cl = COURSE[i];
+    CENTER = [[0, back], [0, 0], [0, -cl.legA], [cl.gLocal.x, cl.gLocal.z]];
+  } else if (holeSpec.par >= 4) {
+    const s1 = L * 0.62, s2 = L - s1;
+    CENTER = [[0, back], [0, 0], [0, -s1], [b, -s1 - Math.sqrt(s2 * s2 - b * b)]];
+  } else {
+    CENTER = [[0, back], [0, 0], [b, -Math.sqrt(L * L - b * b)]];
+  }
+  const [gx, gz] = CENTER[CENTER.length - 1], [px, pz] = CENTER[CENTER.length - 2];
+  const fl = Math.hypot(gx - px, gz - pz);
+  GF = { x: (gx - px) / fl, z: (gz - pz) / fl }; GR = { x: -GF.z, z: GF.x };
+  const small = holeSpec.small, par4 = holeSpec.par >= 4;
+  GREEN = holeSpec.green ? { x: gx, z: gz, rx: holeSpec.green[0], rz: holeSpec.green[1] } : { x: gx, z: gz, rx: small ? 9 : par4 ? 13 : 11, rz: small ? 10 : par4 ? 16 : 13 };
+  const gp = (dx, dz) => ({ x: gx + GR.x * dx + GF.x * dz, z: gz + GR.z * dx + GF.z * dz });
+  const sp = (s, off) => pointAt(back + s * L, off);
+    const sOf = o => o.afterCorner != null ? back + COURSE[i].legA + o.afterCorner : o.fromTee != null ? back + o.fromTee / YD : back + L - o.toGreen / YD;
+    CLEARINGS = (holeSpec.clearings || []).map(o => { const c = pointAt(sOf(o), o.off); return { x0: c.x - o.w / 2, x1: c.x + o.w / 2, z0: c.z - o.l / 2, z1: c.z + o.l / 2 }; });
+    LANDMARKS = (holeSpec.landmarks || []).map(o => Object.assign(pointAt(sOf(o), o.off), o));
+    // Construcciones (solo en hoyos rectos: ejes alineados con el hoyo)
+    BUILDINGS = (holeSpec.buildings || []).map(o => { const c = pointAt(sOf(o), o.off), y0 = baseH(c.x, c.z);
+      return Object.assign({ x0: c.x - o.w / 2, x1: c.x + o.w / 2, z0: c.z - o.l / 2, z1: c.z + o.l / 2, y0, y1: y0 + o.h }, o); });
+  const place = o => Object.assign(o.g ? gp(o.dx, o.dz) : o.s != null ? sp(o.s, o.off) : pointAt(sOf(o), o.off), { rx: o.rx, rz: o.rz });
+  PIN = gp(holeSpec.pin[0], holeSpec.pin[1]);
+  HOLE = {
+    L, sTee: back, par: holeSpec.par, wide: holeSpec.wide || (par4 ? 13 : 11), ob: holeSpec.ob || (par4 ? 64 : 50),
+    fwStart: holeSpec.fwFrom != null ? back + holeSpec.fwFrom / YD : par4 ? back + 40 : back + L - 26,
+    fwHalf: par4 ? (s => 10 + 1.5 * Math.sin(s * 0.04)) : (() => 8),
+  };
+  BUNKERS = (holeSpec.bunkers || []).map(o => Object.assign(place(o), { depth: 0.6 }));
+  PONDS = (holeSpec.ponds || []).map(o => { const p = place(o); p.y = baseH(p.x, p.z) - 0.5; return p; });
+  GREEN_H = baseH(gx, gz) + 0.4 + (holeSpec.rise || 0);
+  TEES = holeSpec.yd.map((y, k) => { const z = (y - holeSpec.yd[1]) / YD; return { x: 0, z, h: baseH(0, z) + 0.35 + (holeSpec.teeRise || 0), set: k }; });
+  const xs = CENTER.map(c => c[0]), zs = CENTER.map(c => c[1]);
+  const mg = Math.max(HOLE.ob, 40) + 10;
+  BOUNDS = { x0: Math.min(...xs) - mg, x1: Math.max(...xs) + mg, z0: Math.max(...zs) + 30, z1: Math.min(...zs) - 60 };
+  PIN_Y = H(PIN.x, PIN.z);
+  return TEES[teeSet];
+}
+
+// ───────────────────────── Aerodinámica ─────────────────────────
+// Coeficientes ajustados para reproducir datos de TrackMan a nivel del mar (driver ≈ 245 m, hierro 7 ≈ 160 m);
+// la menor densidad del aire de Puebla alarga el vuelo de forma natural.
+function aeroAccel(vRel, w, out) {
+  const s = vRel.length(); if (s < 0.01) return out.set(0, 0, 0);
+  const S = BR * w.length() / s;
+  const Cd = 0.22 + 0.2 * S, Cl = Math.min(0.29, 0.06 + 1.1 * S);
+  const k = 0.5 * RHO * BA * s * s / BM;
+  out.copy(vRel).multiplyScalar(-Cd * k / s);
+  if (w.lengthSq() > 1) {
+    const m = new THREE.Vector3().crossVectors(w, vRel);
+    const ml = m.length(); if (ml > 1e-6) out.addScaledVector(m, Cl * k / ml);
+  }
+  return out;
+}
+// Perfil logarítmico: el viento es más débil cerca del suelo
+const wind = { dir: 0, world: 0, speed: 0, vec: new THREE.Vector3() };
+function windAt(y, out) {
+  const f = Math.max(0, Math.log(Math.max(y, 0.05) / 0.03) / Math.log(10 / 0.03));
+  return out.copy(wind.vec).multiplyScalar(Math.min(f, 1.25));
+}
+function flatCarry(club, power = 1) {
+  const a = club.la * Math.PI / 180, v0 = club.v * power;
+  const p = new THREE.Vector3(), v = new THREE.Vector3(0, v0 * Math.sin(a), -v0 * Math.cos(a));
+  const w = new THREE.Vector3(club.rpm * (0.35 + 0.65 * power) * Math.PI / 30, 0, 0), acc = new THREE.Vector3();
+  const dt = 1 / 120;
+  for (let t = 0; t < 15 && p.y >= 0; t += dt) {
+    aeroAccel(v, w, acc); acc.y -= G;
+    v.addScaledVector(acc, dt); p.addScaledVector(v, dt); w.multiplyScalar(Math.exp(-dt / 22));
+  }
+  return -p.z;
+}
+CLUBS.forEach(c => { c.table = c.putter ? [] : Array.from({ length: 21 }, (_, i) => flatCarry(c, Math.max(0.03, i / 20))); c.carry = c.putter ? 0 : c.table[20]; });
+function carryAt(c, p) { const t = Math.max(0, Math.min(20, p * 20)), i = Math.floor(t), j = Math.min(20, i + 1); return c.table[i] + (c.table[j] - c.table[i]) * (t - i); }
+const yd = m => m * YD < 10 ? (m * YD).toFixed(1) + ' yd' : Math.round(m * YD) + ' yd';
+
+// ───────────────────────── Escena 3D ─────────────────────────
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 1600);
+{
+  const g = document.createElement('canvas'); g.width = 2; g.height = 256;
+  const cx = g.getContext('2d'), gr = cx.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#3f7fc4'); gr.addColorStop(0.55, '#9cc6e6'); gr.addColorStop(1, '#dfe9e4');
+  cx.fillStyle = gr; cx.fillRect(0, 0, 2, 256);
+  scene.background = new THREE.CanvasTexture(g);
+  scene.fog = new THREE.Fog(0xcfe0dc, 180, 700);
+}
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x3c5a26, 0.75));
+const sun = new THREE.DirectionalLight(0xfff3dc, 0.85); sun.position.set(-120, 200, 80); scene.add(sun);
+const outer = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshLambertMaterial({ color: 0x35601f }));
+outer.rotation.x = -Math.PI / 2; outer.position.y = -0.8; scene.add(outer);
+
+function hash(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
+let holeGroup = null, trees = [];
+function disposeGroup(g) { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); scene.remove(g); }
+function buildScene(holeIdx) {
+  if (holeGroup) disposeGroup(holeGroup);
+  holeGroup = new THREE.Group(); scene.add(holeGroup);
+  { // Terreno con colores por superficie
+    const W = Math.round(BOUNDS.x1 - BOUNDS.x0 + 30), L = Math.round(BOUNDS.z0 - BOUNDS.z1 + 30);
+    const cx = (BOUNDS.x0 + BOUNDS.x1) / 2, cz = (BOUNDS.z0 + BOUNDS.z1) / 2;
+    const geo = new THREE.PlaneGeometry(W, L, W, L); geo.rotateX(-Math.PI / 2); geo.translate(cx, 0, cz);
+    const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      pos.setY(i, H(x, z));
+      const s = surfAt(x, z), n = hash(x, z) * 0.06 - 0.03;
+      if (s === SURF.GREEN) { c.setRGB(0.36, 0.66, 0.27); if (Math.floor((x - z) / 3) % 2) c.offsetHSL(0, 0, 0.025); }
+      else if (s === SURF.FRINGE) c.setRGB(0.32, 0.6, 0.24);
+      else if (s === SURF.FAIRWAY || s === SURF.TEE) { c.setRGB(0.38, 0.56, 0.22); if (Math.floor(centerInfo(x, z).s / 9) % 2) c.offsetHSL(0, 0, 0.03); }
+      else if (s === SURF.BUNKER) c.setRGB(0.88, 0.81, 0.62);
+      else if (s === SURF.WATER) c.setRGB(0.2, 0.33, 0.24);
+      else if (s === SURF.OB) c.setRGB(0.21, 0.36, 0.14);
+      else { const dry = 0.5 + 0.5 * Math.sin(x * 0.13 + Math.sin(z * 0.07) * 2) * Math.cos(z * 0.11); c.setRGB(0.22 + 0.2 * dry, 0.36 + 0.04 * dry, 0.13 + 0.06 * dry); }
+      col[i * 3] = c.r + n; col[i * 3 + 1] = c.g + n; col[i * 3 + 2] = c.b + n * 0.5;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.computeVertexNormals();
+    holeGroup.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
+    for (const p of PONDS) {
+      const water = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshPhongMaterial({ color: 0x2f6f8f, shininess: 90, specular: 0x88aacc, transparent: true, opacity: 0.88 }));
+      water.rotation.x = -Math.PI / 2; water.scale.set(p.rx * 1.12, p.rz * 1.12, 1); water.position.set(p.x, p.y, p.z); holeGroup.add(water);
+    }
+  }
+  // Árboles (instanciados) — también son obstáculos físicos
+  trees = LANDMARKS.map(o => ({ x: o.x, z: o.z, y: H(o.x, o.z), h: o.h, r: o.r, pine: false, palm: o.palm, tint: o.palm ? 0.05 : 0.2, trunk: o.trunk || (o.palm ? 0.9 : o.name ? 3.5 : 1.3), name: o.name }));
+  {
+    let seed = 7 + holeIdx * 101; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const area = (BOUNDS.x1 - BOUNDS.x0) * (BOUNDS.z0 - BOUNDS.z1), want = Math.min(800, area / 32);
+    for (let i = 0; i < want * 4 && trees.length < want; i++) {
+      const x = BOUNDS.x0 + rnd() * (BOUNDS.x1 - BOUNDS.x0), z = BOUNDS.z0 - rnd() * (BOUNDS.z0 - BOUNDS.z1), c = centerInfo(x, z);
+      if (LANDMARKS.some(o => Math.hypot(x - o.x, z - o.z) < o.r + 4) || c.d < (holeSpec.wideAfter && (c.s - HOLE.sTee) * YD > holeSpec.wideAfter[0] ? holeSpec.wideAfter[1] : HOLE.wide) + 1.5 + rnd() * 3 || [...BUILDINGS, ...CLEARINGS].some(b => x > b.x0 - 3 && x < b.x1 + 3 && z > b.z0 - 3 && z < b.z1 + 3) || c.d > HOLE.ob + 25 || ell(GREEN, x, z) < 1.8 || PONDS.some(p => ell(p, x, z) < 1.15) || BUNKERS.some(b => ell(b, x, z) < 1.5) || TEES.some(t => Math.hypot(x - t.x, z - t.z) < 9)) continue;
+      const pine = rnd() < 0.35, h = 8 + rnd() * 10, r = pine ? 2 + rnd() * 1.4 : 3 + rnd() * 2.5;
+      trees.push({ x, z, y: H(x, z), h, r, pine, tint: rnd() });
+    }
+    const trunkM = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.32, 1, 6), new THREE.MeshLambertMaterial({ color: 0x5a4130 }), Math.max(1, trees.length));
+    const pines = trees.filter(t => t.pine), broad = trees.filter(t => !t.pine);
+    const pineM = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 8), new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, pines.length));
+    const broadM = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), Math.max(1, broad.length));
+    trunkM.count = trees.length; pineM.count = pines.length; broadM.count = broad.length;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color();
+    trees.forEach((t, i) => { const k = t.trunk || 1, th = t.palm ? 0.9 : 0.5; m.compose(new THREE.Vector3(t.x, t.y + t.h * th / 2, t.z), q, new THREE.Vector3(k, t.h * th, k)); trunkM.setMatrixAt(i, m); });
+    pines.forEach((t, i) => {
+      m.compose(new THREE.Vector3(t.x, t.y + t.h * 0.6, t.z), q, new THREE.Vector3(t.r, t.h * 0.8, t.r)); pineM.setMatrixAt(i, m);
+      pineM.setColorAt(i, col.setHSL(0.33 + t.tint * 0.04, 0.45, 0.17 + t.tint * 0.06));
+    });
+    broad.forEach((t, i) => {
+      m.compose(new THREE.Vector3(t.x, t.y + t.h * (t.palm ? 0.93 : 0.62), t.z), q, new THREE.Vector3(t.r, t.r * (t.palm ? 0.45 : 0.9), t.r)); broadM.setMatrixAt(i, m);
+      broadM.setColorAt(i, col.setHSL(0.24 + t.tint * 0.06, 0.45, 0.22 + t.tint * 0.08));
+    });
+    holeGroup.add(trunkM, pineM, broadM);
+  }
+  // Marcas de salida, hoyo
+  for (const t of TEES) for (const dx of [-2.5, 2.5]) {
+    const tm = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshLambertMaterial({ color: TEESETS[t.set].color }));
+    tm.position.set(t.x + dx, t.h + 0.08, t.z - 1); holeGroup.add(tm);
+  }
+  for (const bd of BUILDINGS) { // pádel techado: techo de lámina sobre columnas, cancha con malla y cristal
+    const w = bd.x1 - bd.x0, l = bd.z1 - bd.z0, cx = (bd.x0 + bd.x1) / 2, cz = (bd.z0 + bd.z1) / 2;
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.35, l + 0.6), new THREE.MeshLambertMaterial({ color: 0xc9ccc8 }));
+    roof.position.set(cx, bd.y1 - 0.17, cz); holeGroup.add(roof);
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(w, bd.h - 0.35, l), new THREE.MeshLambertMaterial({ color: 0x43514c, transparent: true, opacity: 0.45, depthWrite: false }));
+    walls.position.set(cx, bd.y0 + (bd.h - 0.35) / 2, cz); holeGroup.add(walls);
+    const colG = new THREE.CylinderGeometry(0.15, 0.15, bd.h, 6), colM = new THREE.MeshLambertMaterial({ color: 0x2e3431 });
+    for (const px of [bd.x0, bd.x1]) for (let k = 0; k <= 3; k++) { const c = new THREE.Mesh(colG, colM); c.position.set(px, bd.y0 + bd.h / 2, bd.z0 + l * k / 3); holeGroup.add(c); }
+  }
+  // Estacas blancas de fuera de límites donde el límite está cerca de la calle
+  if (holeSpec.ob) {
+    const stakeGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 6), stakeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const total = HOLE.sTee + HOLE.L;
+    for (let sAt = HOLE.sTee + 10; sAt < total + 15; sAt += 12) for (const side of [-1, 1]) {
+      const pt = pointAt(Math.min(sAt, total), side * HOLE.ob);
+      if (sAt > total) { pt.x += GF.x * (sAt - total); pt.z += GF.z * (sAt - total); }
+      if (Math.abs(centerInfo(pt.x, pt.z).d - HOLE.ob) > 0.6) continue;
+      const st = new THREE.Mesh(stakeGeo, stakeMat); st.position.set(pt.x, H(pt.x, pt.z) + 0.5, pt.z); holeGroup.add(st);
+    }
+  }
+  const cup = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 20), new THREE.MeshBasicMaterial({ color: 0x0b0b0b }));
+  cup.rotation.x = -Math.PI / 2; cup.position.set(PIN.x, PIN_Y + 0.012, PIN.z); holeGroup.add(cup);
+  flag.position.set(PIN.x, PIN_Y, PIN.z);
+  drawMapBg();
+}
+// Bandera
+const flag = new THREE.Group();
+{
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.0125, 2.13, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+  pole.position.y = 1.065; flag.add(pole);
+  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.36), new THREE.MeshLambertMaterial({ color: 0xf2c230, side: THREE.DoubleSide }));
+  cloth.position.set(0.25, 1.95, 0); flag.add(cloth);
+  scene.add(flag);
+}
+// Bola, sombra, estela y línea de apuntado
+const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BR, 18, 14), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x333333 }));
+scene.add(ballMesh);
+const shadow = new THREE.Mesh(new THREE.CircleGeometry(BR * 1.2, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
+const TRAIL_MAX = 4000;
+const trailGeo = new THREE.BufferGeometry(); trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 3), 3)); trailGeo.setDrawRange(0, 0);
+const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 })); trail.frustumCulled = false; scene.add(trail);
+let trailN = 0;
+const aimGeo = new THREE.BufferGeometry(); aimGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(200 * 3), 3));
+const aimLine = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color: 0xf2c230, dashSize: 1, gapSize: 0.7 })); aimLine.frustumCulled = false; scene.add(aimLine);
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40), new THREE.MeshBasicMaterial({ color: 0xf2c230, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+ring.rotation.x = -Math.PI / 2; scene.add(ring);
+
+// ───────────────────────── Estado de juego ─────────────────────────
+const ball = { p: new THREE.Vector3(), v: new THREE.Vector3(), w: new THREE.Vector3(), mode: 'rest', carry: 0, landed: false, start: new THREE.Vector3(), surf: SURF.TEE, rollT: 0 };
+const game = { state: 'menu', strokes: 0, aim: 0, club: 0, prev: new THREE.Vector3(), restTimer: 0, holed: false, shotDir: new THREE.Vector3(0, 0, -1), hole: 0, tee: 1, scores: [], windDir: Math.random() * Math.PI * 2, windSpeed: 0.5 + Math.random() * 4.5 };
+const meter = { phase: 'idle', pos: 0, power: 0, ACC: 0.0, MIN: -0.12 };
+const $ = id => document.getElementById(id);
+
+function placeBall(x, z, tee) {
+  ball.p.set(x, H(x, z) + BR + (tee ? 0.025 : 0), z); ball.v.set(0, 0, 0); ball.w.set(0, 0, 0); ball.mode = 'rest';
+  ball.surf = surfAt(x, z);
+}
+function distToPin() { return Math.hypot(PIN.x - ball.p.x, PIN.z - ball.p.z); }
+function aimAt(x, z) { game.aim = Math.atan2(x - ball.p.x, -(z - ball.p.z)); }
+function fwd(a, out = new THREE.Vector3()) { return out.set(Math.sin(a), 0, -Math.cos(a)); }
+function lieFactor(club) {
+  const s = ball.surf;
+  if (club.putter) return { v: s === SURF.GREEN || s === SURF.FRINGE ? 1 : 0.8, spin: 1, la: 0 };
+  if (s === SURF.ROUGH) return { v: 0.88, spin: 0.6, la: 1.5 };
+  if (s === SURF.BUNKER) return club.name === 'Wedge SW' ? { v: 0.85, spin: 0.7, la: 3 } : { v: 0.7, spin: 0.6, la: 2 };
+  return { v: 1, spin: 1, la: 0 };
+}
+function autoClub() {
+  if (ball.surf === SURF.GREEN) return CLUBS.length - 1;
+  const cl = COURSE[game.hole], sBall = centerInfo(ball.p.x, ball.p.z).s, sCorner = HOLE.sTee + (cl.legA || 0);
+  // En el dogleg, el palo sugerido es el que llega al quiebre, no a la bandera
+  const d = cl.legA && sBall < sCorner - 15 ? sCorner - sBall : distToPin(), lf = lieFactor(CLUBS[0]).v;
+  if (ball.surf === SURF.FRINGE && d < 25) return CLUBS.length - 1;
+  let pick = CLUBS.length - 2;
+  for (let i = CLUBS.length - 2; i >= 0; i--) { if (CLUBS[i].carry * lf >= d * 0.9) { pick = i; break; } pick = i; }
+  if (ball.surf !== SURF.TEE && pick === 0) pick = 1; // driver solo desde el tee
+  return pick;
+}
+function startHole(i) {
+  game.hole = i; game.strokes = 0; game.holed = false; $('overlay').hidden = true;
+  const tee = defineHole(i, game.tee);
+  buildScene(i);
+  // Viento de la ronda (rumbo real) con variación por hoyo; se pasa al marco local del hoyo
+  const B = COURSE[i].bearing;
+  const wDir = game.windDir + (Math.random() - 0.5) * 0.5;
+  wind.dir = wDir - B; wind.world = wDir;
+  wind.speed = Math.max(0, Math.round(game.windSpeed * (0.8 + Math.random() * 0.4) * 10) / 10);
+  sun.position.set(Math.sin(SUN_AZ - B) * 150, 160, -Math.cos(SUN_AZ - B) * 150);
+  fwd(wind.dir, wind.vec).multiplyScalar(wind.speed);
+  placeBall(tee.x, tee.z, true); ball.surf = SURF.TEE;
+  trailN = 0; trailGeo.setDrawRange(0, 0);
+  $('holeName').textContent = `Golfito La Huerta · Hoyo ${i + 1}`;
+  $('holeSub').textContent = `Par ${holeSpec.par} · ${holeSpec.yd[game.tee]} yd · Ventaja ${holeSpec.hcp}`;
+  readyForShot(true);
+}
+function readyForShot(first) {
+  game.state = 'aim'; meter.phase = 'idle'; meter.pos = 0;
+  game.club = autoClub();
+  // En hoyos largos apunta a la calle a la distancia del palo; si llega, a la bandera
+  const reach = CLUBS[game.club].carry * lieFactor(CLUBS[game.club]).v;
+  const cl = COURSE[game.hole], sBall = centerInfo(ball.p.x, ball.p.z).s, sCorner = HOLE.sTee + (cl.legA || 0);
+  if (cl.legA && !CLUBS[game.club].putter && sBall < sCorner - 15) {
+    // Dogleg: por defecto se apunta a la calle hacia el quiebre, no por encima de los árboles
+    const p = pointAt(Math.min(sBall + reach * 0.95, sCorner + 10)); aimAt(p.x, p.z);
+  } else if (!CLUBS[game.club].putter && distToPin() > reach + 25) {
+    const s = centerInfo(ball.p.x, ball.p.z).s, p = pointAt(s + reach); aimAt(p.x, p.z);
+  } else aimAt(PIN.x, PIN.z);
+  if (first) { camPos.copy(ball.p).addScaledVector(fwd(game.aim), -5); camPos.y += 2; camLook.copy(ball.p).addScaledVector(fwd(game.aim), 40); }
+  updateHUD(); updateAim(); $('swing').disabled = false;
+}
+
+// ───────────────────────── Golpe ─────────────────────────
+function shoot(power, err) {
+  const club = CLUBS[game.club], lf = lieFactor(club);
+  game.prev.copy(ball.p); ball.start.copy(ball.p); game.strokes++;
+  const startDir = game.aim + (err * (club.putter ? 1.2 : 4) + (Math.random() - 0.5) * 0.6) * Math.PI / 180;
+  const f = fwd(startDir); game.shotDir.copy(f);
+  ball.carry = 0; ball.landed = false; ball.rollT = 0; trailN = 0;
+  if (club.putter) {
+    const n = normalAt(ball.p.x, ball.p.z);
+    ball.v.copy(f).addScaledVector(n, -f.dot(n)).normalize().multiplyScalar(club.v * power * lf.v);
+    ball.w.set(0, 0, 0); ball.mode = 'roll'; ball.landed = true;
+  } else {
+    const la = (club.la + lf.la) * Math.PI / 180, sp = club.v * power * lf.v;
+    ball.v.copy(f).multiplyScalar(Math.cos(la) * sp); ball.v.y = Math.sin(la) * sp;
+    // Eje de giro: retroceso (f × arriba) inclinado por el error de precisión → efecto (slice/hook)
+    const up = new THREE.Vector3(0, 1, 0), r0 = new THREE.Vector3().crossVectors(f, up);
+    const tilt = -err * 18 * Math.PI / 180;
+    const axis = r0.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(up, -Math.sin(tilt));
+    ball.w.copy(axis).multiplyScalar(club.rpm * (0.35 + 0.65 * power) * lf.spin * Math.PI / 30);
+    ball.mode = 'air';
+  }
+  game.state = 'flight'; $('swing').disabled = true; $('hint').hidden = true;
+  updateHUD();
+}
+
+const tmpA = new THREE.Vector3(), tmpW = new THREE.Vector3(), tmpN = new THREE.Vector3(), tmpU = new THREE.Vector3();
+function step(dt) {
+  const b = ball;
+  if (b.mode === 'air') {
+    const hg = H(b.p.x, b.p.z);
+    windAt(b.p.y - hg, tmpW);
+    aeroAccel(tmpA.copy(b.v).sub(tmpW), b.w, tmpN); tmpN.y -= G;
+    b.v.addScaledVector(tmpN, dt); b.p.addScaledVector(b.v, dt);
+    b.w.multiplyScalar(Math.exp(-dt / 22));
+    hitTrees(); hitBuildings(); if (b.mode !== 'air') return;
+    const h2 = H(b.p.x, b.p.z);
+    if (b.p.y - BR <= h2) {
+      b.p.y = h2 + BR;
+      const s = surfAt(b.p.x, b.p.z); b.surf = s;
+      if (!b.landed) { b.landed = true; b.carry = Math.hypot(b.p.x - b.start.x, b.p.z - b.start.z); }
+      if (s === SURF.WATER || s === SURF.OB) return penalty(s);
+      bounce(s);
+    }
+  } else if (b.mode === 'roll') {
+    const n = normalAt(b.p.x, b.p.z), s = surfAt(b.p.x, b.p.z); b.surf = s;
+    if (s === SURF.WATER || s === SURF.OB) return penalty(s);
+    b.v.addScaledVector(n, -b.v.dot(n));
+    const gt = tmpA.set(0, -G, 0); gt.addScaledVector(n, G * n.y);   // gravedad tangente a la pendiente
+    const sp = b.v.length(), fr = s.roll * G * n.y;
+    if (sp > 1e-4) b.v.addScaledVector(b.v, -Math.min(fr * dt, sp) / sp);
+    b.v.addScaledVector(gt, dt);
+    b.p.addScaledVector(b.v, dt); b.p.y = H(b.p.x, b.p.z) + BR; hitBuildings(); if (b.mode !== 'roll') return;
+    b.rollT += dt;
+    // Hoyo: capturada si pasa por encima despacio
+    const dc = Math.hypot(b.p.x - PIN.x, b.p.z - PIN.z), v2 = b.v.length();
+    if (dc < CUP_R) {
+      if (v2 < 1.35) { b.mode = 'rest'; b.p.set(PIN.x, PIN_Y - 0.03, PIN.z); game.holed = true; return; }
+      if (v2 < 2.1) b.v.multiplyScalar(0.55).applyAxisAngle(tmpU.set(0, 1, 0), (Math.random() - 0.5) * 1.2);
+    }
+    if ((v2 < 0.03 && gt.length() < s.roll * G * 1.3) || b.rollT > 40) { b.v.set(0, 0, 0); b.mode = 'rest'; }
+  }
+}
+function bounce(s) {
+  const b = ball, n = normalAt(b.p.x, b.p.z);
+  const vn = b.v.dot(n);
+  if (vn >= 0) return;
+  const e = s.e / (1 + Math.abs(vn) / 18);
+  const vt = tmpA.copy(b.v).addScaledVector(n, -vn);
+  // Velocidad del punto de contacto: vt − R (ω × n). La fricción la lleva hacia rodadura pura.
+  const u = tmpU.crossVectors(b.w, n).multiplyScalar(-BR).add(vt);
+  const ul = u.length();
+  if (ul > 1e-4) {
+    const J = Math.min(s.mu * (1 + e) * Math.abs(vn), (2 / 7) * ul);
+    const uh = u.divideScalar(ul);
+    vt.addScaledVector(uh, -J);
+    b.w.add(tmpW.crossVectors(n, uh).multiplyScalar(-J / (0.4 * BR)));
+  }
+  b.v.copy(vt).addScaledVector(n, -e * vn);
+  if (-vn * e < 0.6) { b.mode = 'roll'; b.v.copy(vt); b.w.multiplyScalar(0.3); }
+}
+function hitBuildings() {
+  const p = ball.p, v = ball.v;
+  for (const b of BUILDINGS) {
+    if (p.x < b.x0 || p.x > b.x1 || p.z < b.z0 || p.z > b.z1 || p.y > b.y1 + BR || p.y < b.y0) continue;
+    const pen = [p.x - b.x0, b.x1 - p.x, p.z - b.z0, b.z1 - p.z, b.y1 + BR - p.y], k = pen.indexOf(Math.min(...pen));
+    if (k === 4) { // techo
+      if (Math.abs(v.y) < 2.5) return penalty(SURF.OB, `Sobre el techo del ${b.name} · +1 golpe`);
+      p.y = b.y1 + BR; v.y = Math.abs(v.y) * 0.4; v.x *= 0.7; v.z *= 0.7;
+    } else if (k < 2) { p.x = k === 0 ? b.x0 : b.x1; v.x = -v.x * 0.35; }
+    else { p.z = k === 2 ? b.z0 : b.z1; v.z = -v.z * 0.35; }
+    toast(`¡${b.name}!`, 1200);
+  }
+}
+function hitTrees() {
+  const p = ball.p;
+  for (const t of trees) {
+    const dx = p.x - t.x, dz = p.z - t.z;
+    if (Math.abs(dx) > t.r + 2 || Math.abs(dz) > t.r + 2) continue;
+    const cy = t.y + t.h * (t.palm ? 0.93 : 0.62), dy = p.y - cy, R = t.pine ? t.r * 0.7 : t.r * 0.85;
+    const inCanopy = dx * dx + dz * dz + dy * dy * (t.pine ? 0.15 : 1) < R * R && p.y > t.y + t.h * 0.2;
+    const tr = 0.3 * (t.trunk || 1), inTrunk = dx * dx + dz * dz < tr * tr && p.y < t.y + t.h * (t.palm ? 0.9 : 0.5);
+    if ((inCanopy && Math.random() < 0.08) || inTrunk) {
+      ball.v.set(-ball.v.x * 0.25 + (Math.random() - 0.5) * 3, -Math.abs(ball.v.y) * 0.2, -ball.v.z * 0.25 + (Math.random() - 0.5) * 3);
+      ball.w.multiplyScalar(0.2);
+      toast(t.name ? `¡${t.name}!` : '¡Árbol!', 1400);
+      return;
+    }
+  }
+}
+function penalty(s, msg) {
+  ball.mode = 'penalty'; game.strokes++;
+  toast(msg || (s === SURF.WATER ? 'Al agua · +1 golpe' : 'Fuera de límites · +1 golpe'), 2200);
+  setTimeout(() => {
+    placeBall(game.prev.x, game.prev.z, false); ball.surf = surfAt(game.prev.x, game.prev.z);
+    trailN = 0; trailGeo.setDrawRange(0, 0); readyForShot();
+  }, 2200);
+}
+function scoreName(d, n) {
+  if (n === 1) return '¡Hoyo en uno!';
+  return { '-3': 'Albatros', '-2': 'Eagle', '-1': 'Birdie', '0': 'Par', '1': 'Bogey', '2': 'Doble bogey', '3': 'Triple bogey' }[d] || ('+' + d);
+}
+function finishShot() {
+  if (game.holed) {
+    game.state = 'done';
+    game.scores[game.hole] = game.strokes;
+    setTimeout(showHoleResult, 900);
+    return;
+  }
+  const club = CLUBS[game.club];
+  const total = Math.hypot(ball.p.x - ball.start.x, ball.p.z - ball.start.z);
+  toast(club.putter ? `${club.name} · ${yd(total)}` : `${club.name} · vuelo ${yd(ball.carry)} · total ${yd(total)}`, 2200);
+  readyForShot();
+}
+
+// ───────────────────────── Pantallas: inicio, resultado, tarjeta ─────────────────────────
+function scorecardHTML(cur) {
+  let h = '<table class="sc"><tr class="hd"><th>Hoyo</th>', yds = '<tr><th>Yardas</th>', par = '<tr><th>Par</th>', sc = '<tr><th>Golpes</th>';
+  let tot = 0, totPar = 0, done = 0;
+  HOLES.forEach((hl, i) => {
+    h += `<td>${i + 1}</td>`; yds += `<td>${hl.yd[game.tee]}</td>`; par += `<td>${hl.par}</td>`;
+    const s = game.scores[i];
+    if (s != null) { tot += s; totPar += hl.par; done++; }
+    sc += `<td class="${s == null ? '' : s < hl.par ? 'u' : s > hl.par ? 'o' : ''}${i === cur ? ' cur' : ''}">${s ?? '·'}</td>`;
+  });
+  const ydTot = HOLES.reduce((a, hl) => a + hl.yd[game.tee], 0);
+  h += '<td>Total</td></tr>'; yds += `<td>${ydTot}</td></tr>`; par += `<td>${PAR_TOTAL}</td></tr>`; sc += `<td>${done ? tot : '·'}</td></tr>`;
+  return { html: h + yds + par + sc + '</table>', tot, totPar, done };
+}
+function drawCourseMap(cur) {
+  const cv = $('courseMap'), c = cv.getContext('2d'), W = cv.width, Hh = cv.height;
+  const pts = COURSE.flatMap(h => [h.tee, h.green]);
+  const e0 = Math.min(...pts.map(p => p.e)) - 25, e1 = Math.max(...pts.map(p => p.e)) + 25;
+  const n0 = Math.min(...pts.map(p => p.n)) - 25, n1 = Math.max(...pts.map(p => p.n)) + 25;
+  const k = Math.min(W / (e1 - e0), Hh / (n1 - n0)), ox = (W - (e1 - e0) * k) / 2, oy = (Hh - (n1 - n0) * k) / 2;
+  const X = e => ox + (e - e0) * k, Y = n => Hh - oy - (n - n0) * k;
+  c.fillStyle = '#1d3a22'; c.fillRect(0, 0, W, Hh);
+  COURSE.forEach((h, i) => {
+    const on = i === cur;
+    c.strokeStyle = on ? '#f2c230' : 'rgba(143,209,106,.75)'; c.lineWidth = on ? 9 : 6; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(X(h.tee.e), Y(h.tee.n)); if (h.corner) c.lineTo(X(h.corner.e), Y(h.corner.n)); c.lineTo(X(h.green.e), Y(h.green.n)); c.stroke();
+    c.fillStyle = on ? '#f2c230' : '#6ebe50'; c.beginPath(); c.arc(X(h.green.e), Y(h.green.n), on ? 11 : 9, 0, 7); c.fill();
+    c.fillStyle = '#f4f0e2'; c.beginPath(); c.arc(X(h.tee.e), Y(h.tee.n), 11, 0, 7); c.fill();
+    c.fillStyle = '#14281a'; c.font = '600 14px "Barlow Semi Condensed", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(String(i + 1), X(h.tee.e), Y(h.tee.n) + 1);
+  });
+  c.fillStyle = '#f4f0e2'; c.font = '600 16px "Barlow Semi Condensed", sans-serif'; c.fillText('N ↑', W - 24, 18);
+}
+function showOverlay({ eyebrow, title, text, button, tees, card, map }) {
+  $('courseMap').hidden = map == null; if (map != null) drawCourseMap(map);
+  $('ovEyebrow').textContent = eyebrow; $('ovTitle').textContent = title; $('ovText').textContent = text;
+  $('ovBtn').textContent = button; $('teePick').hidden = !tees;
+  $('scWrap').hidden = card == null; if (card != null) $('scWrap').innerHTML = card;
+  $('overlay').hidden = false;
+}
+function showHoleResult() {
+  const i = game.hole, last = i === HOLES.length - 1, c = scorecardHTML(i);
+  if (!last) {
+    showOverlay({ eyebrow: `Hoyo ${i + 1} terminado`, title: scoreName(game.strokes - holeSpec.par, game.strokes), text: `${game.strokes} golpe${game.strokes > 1 ? 's' : ''} · par ${holeSpec.par}`, button: `Ir al hoyo ${i + 2}`, card: c.html, map: i + 1 });
+  } else {
+    const d = c.tot - c.totPar;
+    showOverlay({ eyebrow: 'Ronda terminada', title: `${c.tot} golpes`, text: d === 0 ? `Par del campo (${PAR_TOTAL})` : `${d > 0 ? '+' : ''}${d} sobre par ${PAR_TOTAL}`, button: 'Jugar otra ronda', tees: true, card: c.html, map: -1 });
+  }
+}
+$('ovBtn').onclick = () => {
+  if (game.state === 'done' && game.hole < HOLES.length - 1) startHole(game.hole + 1);
+  else { game.scores = []; game.windDir = Math.random() * Math.PI * 2; game.windSpeed = 0.5 + Math.random() * 4.5; startHole(0); }
+};
+document.querySelectorAll('.tee-btn').forEach(b => b.onclick = () => {
+  game.tee = +b.dataset.tee;
+  document.querySelectorAll('.tee-btn').forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false'));
+});
+
+// ───────────────────────── Interfaz ─────────────────────────
+let toastT = 0;
+function toast(msg, ms) { const t = $('toast'); t.textContent = msg; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => t.style.opacity = 0, ms); }
+function updateHUD() {
+  $('dist').textContent = yd(distToPin());
+  $('strokes').textContent = game.strokes;
+  $('lie').textContent = ball.surf.name || '';
+  const c = CLUBS[game.club];
+  $('clubName').textContent = c.name;
+  $('clubRange').textContent = c.putter ? 'máx ≈ ' + yd(c.v * c.v / (2 * SURF.GREEN.roll * G)) + ' en green' : 'vuelo ≈ ' + yd(c.carry * lieFactor(c).v);
+  const rel = (wind.dir - game.aim) * 180 / Math.PI;
+  $('windArrow').style.transform = `rotate(${rel}deg)`;
+  $('windSpd').textContent = wind.speed.toFixed(1); $('windLbl').textContent = 'm/s · del ' + compass(wind.world + Math.PI);
+}
+function updateAim() {
+  const c = CLUBS[game.club], f = fwd(game.aim);
+  const len = c.putter ? Math.min(distToPin(), 30) : c.carry * lieFactor(c).v;
+  const arr = aimGeo.attributes.position.array, N = 100;
+  for (let i = 0; i < N; i++) {
+    const t = (i / (N - 1)) * len, x = ball.p.x + f.x * t, z = ball.p.z + f.z * t;
+    arr[i * 3] = x; arr[i * 3 + 1] = H(x, z) + 0.06; arr[i * 3 + 2] = z;
+  }
+  aimGeo.setDrawRange(0, N); aimGeo.attributes.position.needsUpdate = true; aimLine.computeLineDistances();
+  const tx = ball.p.x + f.x * len, tz = ball.p.z + f.z * len;
+  ring.position.set(tx, H(tx, tz) + 0.08, tz); ring.scale.setScalar(c.putter ? 0.15 : Math.max(1.5, len / 40));
+  aimLine.material.dashSize = c.putter ? 0.15 : 1; aimLine.material.gapSize = c.putter ? 0.1 : 0.7;
+  updateHUD();
+}
+function setClub(i) { if (game.state !== 'aim' || meter.phase !== 'idle') return; game.club = (i + CLUBS.length) % CLUBS.length; updateAim(); }
+$('clubPrev').onclick = () => setClub(game.club - 1);
+$('clubNext').onclick = () => setClub(game.club + 1);
+
+function swingTap() {
+  if (game.state !== 'aim') return;
+  if (meter.phase === 'idle') { meter.phase = 'up'; meter.pos = 0; $('pwMark').style.opacity = 0; }
+  else if (meter.phase === 'up' || meter.phase === 'top') { meter.power = Math.max(0.03, Math.min(1, meter.pos)); meter.phase = 'down'; $('pwMark').style.left = mPct(meter.power); $('pwMark').style.opacity = 1; }
+  else if (meter.phase === 'down') { fire(meter.pos); }
+}
+function fire(pos) {
+  const err = Math.max(-1, Math.min(1, (pos - meter.ACC) / 0.1));
+  meter.phase = 'idle';
+  shoot(meter.power, Math.abs(err) < 0.25 ? err * 0.3 : err);
+}
+const mPct = p => ((p - meter.MIN) / (1 - meter.MIN) * 100) + '%';
+$('accZone').style.left = mPct(meter.ACC);
+$('swing').addEventListener('pointerdown', e => { e.preventDefault(); swingTap(); });
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); swingTap(); }
+  if (game.state !== 'aim' || meter.phase !== 'idle') return;
+  const fine = CLUBS[game.club].putter ? 0.004 : 0.012;
+  if (e.key === 'ArrowLeft') { game.aim -= fine; updateAim(); }
+  if (e.key === 'ArrowRight') { game.aim += fine; updateAim(); }
+  if (e.key === 'ArrowUp') setClub(game.club - 1);
+  if (e.key === 'ArrowDown') setClub(game.club + 1);
+});
+let drag = null;
+canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => {
+  if (!drag || game.state !== 'aim' || meter.phase !== 'idle') return;
+  const k = CLUBS[game.club].putter ? 0.0012 : 0.003;
+  game.aim += (e.clientX - drag.x) * k; drag.x = e.clientX; updateAim();
+});
+canvas.addEventListener('pointerup', () => { drag = null; });
+
+// Minimapa (se ajusta a cada hoyo)
+const map = $('map'), mctx = map.getContext('2d');
+const MAP = { x0: 0, z0: 0, k: 1, ox: 0 };
+const mx = x => MAP.ox + (x - MAP.x0) * MAP.k, mz = z => (MAP.z0 - z) * MAP.k;
+const mapBg = document.createElement('canvas'); mapBg.width = map.width; mapBg.height = map.height;
+function drawMapBg() {
+  const xs = CENTER.map(c => c[0]), zs = CENTER.map(c => c[1]);
+  const x0 = Math.min(...xs) - 30, x1 = Math.max(...xs) + 30, z0 = Math.max(...zs) + 10, z1 = Math.min(...zs) - 25;
+  MAP.k = Math.min(map.width / (x1 - x0), map.height / (z0 - z1));
+  MAP.x0 = x0; MAP.z0 = z0; MAP.ox = (map.width - (x1 - x0) * MAP.k) / 2;
+  const g = mapBg.getContext('2d'), img = g.createImageData(map.width, map.height);
+  for (let j = 0; j < map.height; j++) for (let i = 0; i < map.width; i++) {
+    const x = MAP.x0 + (i + 0.5 - MAP.ox) / MAP.k, z = MAP.z0 - (j + 0.5) / MAP.k;
+    const s = surfAt(x, z);
+    const c = s === SURF.GREEN || s === SURF.FRINGE ? [110, 190, 80] : s === SURF.FAIRWAY || s === SURF.TEE ? [80, 150, 55] : s === SURF.BUNKER ? [225, 208, 160]
+      : s === SURF.WATER ? [60, 130, 170] : s === SURF.OB ? [30, 50, 30] : [45, 90, 35];
+    const k = (j * map.width + i) * 4; img.data[k] = c[0]; img.data[k + 1] = c[1]; img.data[k + 2] = c[2]; img.data[k + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  g.fillStyle = 'rgba(15,50,20,.85)';
+  for (const t of trees) { g.beginPath(); g.arc(mx(t.x), mz(t.z), Math.max(1.2, t.r * MAP.k * 0.6), 0, 7); g.fill(); }
+}
+function drawMap() {
+  mctx.drawImage(mapBg, 0, 0);
+  mctx.fillStyle = '#f2c230'; mctx.fillRect(mx(PIN.x) - 1, mz(PIN.z) - 8, 2, 8); mctx.fillRect(mx(PIN.x), mz(PIN.z) - 8, 6, 4);
+  if (game.state === 'aim') {
+    const c = CLUBS[game.club], f = fwd(game.aim), len = c.putter ? Math.min(distToPin(), 30) : c.carry * lieFactor(c).v;
+    mctx.strokeStyle = 'rgba(242,194,48,.9)'; mctx.lineWidth = 2; mctx.setLineDash([4, 3]);
+    mctx.beginPath(); mctx.moveTo(mx(ball.p.x), mz(ball.p.z)); mctx.lineTo(mx(ball.p.x + f.x * len), mz(ball.p.z + f.z * len)); mctx.stroke(); mctx.setLineDash([]);
+  }
+  mctx.fillStyle = '#fff'; mctx.strokeStyle = '#000'; mctx.lineWidth = 1.5;
+  mctx.beginPath(); mctx.arc(mx(ball.p.x), mz(ball.p.z), 4, 0, 7); mctx.fill(); mctx.stroke();
+  // Norte real según el rumbo del hoyo
+  const B = COURSE[game.hole].bearing, nx = map.width - 18, ny = 20;
+  mctx.save(); mctx.translate(nx, ny); mctx.rotate(-B);
+  mctx.fillStyle = 'rgba(14,30,20,.8)'; mctx.beginPath(); mctx.arc(0, 0, 13, 0, 7); mctx.fill();
+  mctx.fillStyle = '#f4f0e2'; mctx.beginPath(); mctx.moveTo(0, -10); mctx.lineTo(5, 3); mctx.lineTo(-5, 3); mctx.fill();
+  mctx.font = '600 11px sans-serif'; mctx.textAlign = 'center'; mctx.fillText('N', 0, 12); mctx.restore();
+}
+
+// ───────────────────────── Bucle ─────────────────────────
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize); resize();
+
+const camPos = new THREE.Vector3(0, 3, 6), camLook = new THREE.Vector3(0, 0, -40), wantPos = new THREE.Vector3(), wantLook = new THREE.Vector3();
+let last = performance.now(), acc = 0, hudT = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  // Medidor
+  const c = CLUBS[game.club];
+  const MS = c.putter ? 0.75 : 0.95; // unidades por segundo
+  if (meter.phase === 'up') { meter.pos += dt * MS; if (meter.pos >= 1) { meter.pos = 1; meter.phase = 'top'; meter.topT = 0.12; } }
+  else if (meter.phase === 'top') { meter.topT -= dt; if (meter.topT <= 0) { meter.power = 1; meter.phase = 'down'; $('pwMark').style.left = mPct(1); $('pwMark').style.opacity = 1; } }
+  else if (meter.phase === 'down') { meter.pos -= dt * MS * 1.15; if (meter.pos <= meter.MIN) fire(meter.MIN); }
+  $('marker').style.left = mPct(meter.pos);
+  const shown = meter.phase === 'down' ? meter.power : meter.pos;
+  $('meterRead').textContent = game.state !== 'aim' || meter.phase === 'idle' ? '' : c.putter
+    ? '≈ ' + yd(Math.pow(c.v * shown * lieFactor(c).v, 2) / (2 * SURF.GREEN.roll * G))
+    : Math.round(shown * 100) + '% · vuelo ≈ ' + yd(carryAt(c, Math.max(0.03, shown)) * lieFactor(c).v);
+
+  // Física a 240 Hz
+  if (game.state === 'flight') {
+    acc += dt;
+    while (acc > 1 / 240) {
+      acc -= 1 / 240; step(1 / 240);
+      if (ball.mode !== 'air' && ball.mode !== 'roll') break;
+      if (trailN < TRAIL_MAX && ball.mode === 'air') { trailGeo.attributes.position.setXYZ(trailN++, ball.p.x, ball.p.y, ball.p.z); }
+    }
+    trailGeo.setDrawRange(0, trailN); trailGeo.attributes.position.needsUpdate = true;
+    if (ball.mode === 'rest') { game.state = 'resting'; game.restTimer = game.holed ? 0.2 : 1.1; acc = 0; }
+    hudT -= dt; if (hudT < 0) { updateHUD(); hudT = 0.15; }
+  } else if (game.state === 'resting') {
+    game.restTimer -= dt; if (game.restTimer <= 0) finishShot();
+  }
+
+  if (CENTER) {
+    // Cámara
+    const putting = c.putter;
+    if (game.state === 'aim') {
+      const f = fwd(game.aim);
+      const back = putting ? 3.2 : 5, up = putting ? 1.3 : 1.9, ahead = putting ? 6 : 45;
+      wantPos.copy(ball.p).addScaledVector(f, -back); wantPos.y = Math.max(ball.p.y, H(wantPos.x, wantPos.z)) + up;
+      const lx = ball.p.x + f.x * ahead, lz = ball.p.z + f.z * ahead;
+      wantLook.set(lx, (H(lx, lz) + ball.p.y) / 2 + (putting ? 0 : 1), lz);
+      camPos.lerp(wantPos, Math.min(1, dt * 4)); camLook.lerp(wantLook, Math.min(1, dt * 4));
+    } else if (game.state !== 'done' && game.state !== 'menu') {
+      const hgt = ball.p.y - H(ball.p.x, ball.p.z);
+      wantPos.copy(ball.p).addScaledVector(game.shotDir, putting ? -3 : -14); wantPos.y = ball.p.y + (putting ? 1.4 : 4 + hgt * 0.15);
+      camPos.lerp(wantPos, Math.min(1, dt * (putting ? 3 : 1.4))); camLook.lerp(ball.p, Math.min(1, dt * 6));
+    }
+    camPos.y = Math.max(camPos.y, H(camPos.x, camPos.z) + 0.6);
+    camera.position.copy(camPos); camera.lookAt(camLook);
+
+    // Bola y elementos visuales
+    ballMesh.position.copy(ball.p);
+    const cd = camera.position.distanceTo(ball.p);
+    ballMesh.scale.setScalar(Math.max(1, cd / 14));
+    const gh = H(ball.p.x, ball.p.z); shadow.position.set(ball.p.x, gh + 0.01, ball.p.z);
+    shadow.scale.setScalar(Math.max(1, cd / 14) * (1 + Math.min(3, (ball.p.y - gh) * 0.05))); shadow.visible = ball.p.y - gh < 60;
+    const showAim = game.state === 'aim'; aimLine.visible = ring.visible = showAim; trail.visible = !showAim || trailN > 0;
+    flag.scale.setScalar(Math.max(1, camera.position.distanceTo(flag.position) / 55));
+    flag.rotation.y = Math.PI / 2 - wind.dir + Math.sin(now / 300) * 0.15 * Math.min(1, wind.speed / 3);
+    drawMap();
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(frame);
+}
+// Vista de fondo del menú: el hoyo 1 desde el tee
+defineHole(0, 1); buildScene(0); placeBall(0, 0, true); aimAt(PIN.x, PIN.z);
+camPos.set(0, 2.2, 6); camLook.set(PIN.x * 0.3, 2, -60);
+drawCourseMap(0);
+requestAnimationFrame(frame);
+window.__golf = { ball, game, CLUBS, flatCarry, shoot, H, surfAt, startHole, HOLES, COURSE, get PIN() { return PIN; }, get CENTER() { return CENTER; } };
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
