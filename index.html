@@ -76,6 +76,14 @@ button:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
 #overlay .card { padding: 22px 22px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; width: min(440px, 100%); }
 #overlay h2 { margin: 0; font-family: var(--f-display); font-size: 40px; font-weight: 700; letter-spacing: .04em; color: var(--flag); text-wrap: balance; line-height: 1.05; }
 #overlay p { margin: 0; color: var(--ink-dim); max-width: 34ch; }
+.ov-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.secondary { margin-top: 4px; padding: 9px 18px; border-radius: 8px; border: 1px solid var(--panel-edge); color: var(--ink); font-family: var(--f-display); font-weight: 600; font-size: 17px; letter-spacing: .06em; text-transform: uppercase; }
+.name-box { display: flex; align-items: center; gap: 10px; font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim); }
+.name-box input { width: 190px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--panel-edge); background: rgba(244,240,226,.08); color: var(--ink); font: 500 17px var(--f-body, inherit); text-transform: none; letter-spacing: 0; }
+.name-box input:focus { outline: 2px solid var(--flag); outline-offset: 1px; }
+#exitBtn { margin-top: 6px; width: 96px; padding: 7px 4px; color: var(--ink); font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; pointer-events: auto; }
+.rank-h { margin: 6px 0 2px; font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+table.sc td.nm { text-align: left; max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .primary { margin-top: 4px; padding: 10px 22px; border-radius: 8px; background: var(--flag); color: #1b1a12; font-family: var(--f-display); font-weight: 700; font-size: 18px; letter-spacing: .06em; text-transform: uppercase; }
 .tees { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .tee-btn { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-edge); font-family: var(--f-display); font-weight: 600; font-size: 16px; }
@@ -90,7 +98,7 @@ table.sc th { font-weight: 500; color: var(--ink-dim); text-align: left; font-si
 table.sc tr.hd td { background: rgba(244,240,226,.06); font-weight: 600; }
 table.sc td.cur { outline: 1px solid var(--flag); }
 table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
-@media (max-width: 420px) { .val { font-size: 17px; } #map { width: 74px; height: 140px; } #viewBtn { width: 74px; font-size: 11px; } #altBox { width: 74px; height: 150px; } #altRange { width: 96px; } #swing { flex-basis: 108px; font-size: 17px; } table.sc th, table.sc td { padding: 3px 3px; } table.sc { font-size: 12px; } #overlay .card { padding: 16px 12px; } }
+@media (max-width: 420px) { .val { font-size: 17px; } #map { width: 74px; height: 140px; } #viewBtn, #exitBtn { width: 74px; font-size: 11px; } .name-box input { width: 160px; } #altBox { width: 74px; height: 150px; } #altRange { width: 96px; } #swing { flex-basis: 108px; font-size: 17px; } table.sc th, table.sc td { padding: 3px 3px; } table.sc { font-size: 12px; } #overlay .card { padding: 16px 12px; } }
 @media (prefers-reduced-motion: reduce) { .wind svg { transition: none; } }
 </style>
 </head>
@@ -115,6 +123,7 @@ table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
       </div>
       <canvas id="map" width="192" height="360" aria-label="Mapa del hoyo"></canvas>
       <button id="viewBtn" class="card" aria-label="Cambiar vista">Vista aérea</button>
+      <button id="exitBtn" class="card" aria-label="Salir al inicio">Salir</button>
       <div id="altBox" class="card"><span>Alto</span><input id="altRange" type="range" min="0" max="100" value="75" aria-label="Altura de la cámara"><span>Bajo</span></div>
     </div>
   </div>
@@ -146,15 +155,18 @@ table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
     <div class="card" id="ovCard">
       <div class="lbl" id="ovEyebrow">Golf &amp; Hotel La Huerta · Puebla · 2158 m</div>
       <h2 id="ovTitle">Golfito La Huerta</h2>
-      <p id="ovText">9 hoyos · par 29. Elige tus salidas.</p>
+      <p id="ovText">9 hoyos · par 29. Escribe tu nombre y elige tus salidas.</p>
       <div class="tees" id="teePick">
         <button class="tee-btn" data-tee="0" aria-pressed="false"><i style="background:#d23a2a"></i>Rojas <small>1216 yd</small></button>
         <button class="tee-btn" data-tee="1" aria-pressed="true"><i style="background:#f4f4f4"></i>Blancas <small>1294 yd</small></button>
         <button class="tee-btn" data-tee="2" aria-pressed="false"><i style="background:#2c5fd0"></i>Azules <small>1409 yd</small></button>
       </div>
+      <label class="name-box" id="nameBox"><span>Jugador</span>
+        <input id="playerName" type="text" maxlength="24" autocomplete="off" placeholder="Tu nombre" list="playerList" enterkeyhint="done"></label>
+      <datalist id="playerList"></datalist>
       <canvas id="courseMap" width="520" height="400" aria-label="Mapa del campo con los 9 hoyos"></canvas>
       <div class="sc-wrap" id="scWrap" hidden></div>
-      <button class="primary" id="ovBtn">Empezar</button>
+      <div class="ov-actions"><button class="secondary" id="rankBtn">Ranking</button><button class="primary" id="ovBtn">Empezar</button></div>
     </div>
   </div>
 </div>
@@ -996,7 +1008,49 @@ function drawCourseMap(cur) {
   });
   c.fillStyle = '#f4f0e2'; c.font = '600 16px "Barlow Semi Condensed", sans-serif'; c.fillText('N ↑', W - 24, 18);
 }
+// ── Jugadores e historial (se guardan en este dispositivo; solo cuentan las rondas completas) ──
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+function rounds() { return store.get('golfitoRondas', []); }
+function saveRound() {
+  const r = rounds(), tot = game.scores.reduce((a, b) => a + b, 0);
+  r.push({ player: game.player, date: new Date().toISOString(), tee: game.tee, scores: game.scores.slice(), total: tot });
+  store.set('golfitoRondas', r); return tot;
+}
+function standings() {
+  const by = {};
+  for (const r of rounds()) { const k = r.player.trim().toLowerCase(); (by[k] = by[k] || { name: r.player, list: [] }).list.push(r); }
+  return Object.values(by).map(p => {
+    const tots = p.list.map(r => r.total), best = Math.min(...tots), bestR = p.list.find(r => r.total === best);
+    return { name: p.list[p.list.length - 1].player, n: tots.length, best, bestTee: bestR.tee, avg: tots.reduce((a, b) => a + b, 0) / tots.length };
+  }).sort((a, b) => a.best - b.best || a.avg - b.avg);
+}
+function refreshPlayerList() {
+  $('playerList').innerHTML = standings().map(p => `<option value="${esc(p.name)}">`).join('');
+  if (!$('playerName').value) $('playerName').value = store.get('golfitoJugador', '');
+}
+const fmtPar = d => d === 0 ? 'E' : (d > 0 ? '+' : '') + d;
+function rankingHTML() {
+  const st = standings(), rs = rounds().slice(-10).reverse();
+  if (!st.length) return '<p>Aún no hay rondas completas. Termina los 9 hoyos para entrar al ranking.</p>';
+  let h = '<div class="rank-h">Mejores jugadores</div><table class="sc"><tr class="hd"><th>#</th><th>Jugador</th><th>Mejor</th><th>Prom.</th><th>Rondas</th></tr>';
+  st.forEach((p, i) => { h += `<tr><td>${i + 1}</td><td class="nm">${esc(p.name)}</td><td>${p.best} <small>(${fmtPar(p.best - PAR_TOTAL)})</small></td><td>${p.avg.toFixed(1)}</td><td>${p.n}</td></tr>`; });
+  h += '</table><div class="rank-h">Últimas rondas</div><table class="sc"><tr class="hd"><th>Fecha</th><th>Jugador</th><th>Salidas</th><th>Golpes</th></tr>';
+  rs.forEach(r => { const d = new Date(r.date); h += `<tr><td>${d.getDate()}/${d.getMonth() + 1}</td><td class="nm">${esc(r.player)}</td><td>${TEESETS[r.tee].name}</td><td>${r.total} <small>(${fmtPar(r.total - PAR_TOTAL)})</small></td></tr>`; });
+  return h + '</table>';
+}
+let ovMode = 'start';
+function showStart() {
+  ovMode = 'start'; game.state = 'menu';
+  showOverlay({ eyebrow: 'Golf & Hotel La Huerta · Puebla · 2158 m', title: 'Golfito La Huerta', text: `9 hoyos · par ${PAR_TOTAL}. Escribe tu nombre y elige tus salidas.`, button: 'Empezar', tees: true, map: -1 });
+}
+function showRanking() {
+  ovMode = 'ranking';
+  showOverlay({ eyebrow: 'Solo rondas completas de 9 hoyos', title: 'Ranking', text: '', button: 'Volver', card: rankingHTML() });
+}
 function showOverlay({ eyebrow, title, text, button, tees, card, map }) {
+  $('nameBox').hidden = !tees; $('rankBtn').hidden = !tees; if (tees) refreshPlayerList(); $('ovText').hidden = !text;
   $('courseMap').hidden = map == null; if (map != null) drawCourseMap(map);
   $('ovEyebrow').textContent = eyebrow; $('ovTitle').textContent = title; $('ovText').textContent = text;
   $('ovBtn').textContent = button; $('teePick').hidden = !tees;
@@ -1004,17 +1058,31 @@ function showOverlay({ eyebrow, title, text, button, tees, card, map }) {
   $('overlay').hidden = false;
 }
 function showHoleResult() {
+  if (ovMode !== 'play') return; // salió al inicio mientras la bola rodaba
   const i = game.hole, last = i === HOLES.length - 1, c = scorecardHTML(i);
   if (!last) {
     showOverlay({ eyebrow: `Hoyo ${i + 1} terminado`, title: scoreName(game.strokes - holeSpec.par, game.strokes), text: `${game.strokes} golpe${game.strokes > 1 ? 's' : ''} · par ${holeSpec.par}`, button: `Ir al hoyo ${i + 2}`, card: c.html, map: i + 1 });
   } else {
     const d = c.tot - c.totPar;
-    showOverlay({ eyebrow: 'Ronda terminada', title: `${c.tot} golpes`, text: d === 0 ? `Par del campo (${PAR_TOTAL})` : `${d > 0 ? '+' : ''}${d} sobre par ${PAR_TOTAL}`, button: 'Jugar otra ronda', tees: true, card: c.html, map: -1 });
+    saveRound(); ovMode = 'start';
+    const pos = standings().findIndex(p => p.name.trim().toLowerCase() === game.player.trim().toLowerCase()) + 1;
+    showOverlay({ eyebrow: `Ronda terminada · ${game.player}`, title: `${c.tot} golpes`, text: (d === 0 ? `Par del campo (${PAR_TOTAL})` : `${d > 0 ? '+' : ''}${d} sobre par ${PAR_TOTAL}`) + ` · lugar ${pos} en el ranking`, button: 'Jugar otra ronda', tees: true, card: c.html, map: -1 });
   }
 }
+$('rankBtn').onclick = showRanking;
+refreshPlayerList();
+$('exitBtn').onclick = () => {
+  if (game.state === 'menu' || !$('overlay').hidden) return;
+  if (!confirm('¿Salir al inicio? Esta ronda no se guardará en el ranking.')) return;
+  ball.mode = 'rest'; showStart();
+};
 $('ovBtn').onclick = () => {
+  if (ovMode === 'ranking') return showStart();
   if (game.state === 'done' && game.hole < HOLES.length - 1) startHole(game.hole + 1);
-  else { game.scores = []; game.windDir = Math.random() * Math.PI * 2; game.windSpeed = 0.5 + Math.random() * 4.5; startHole(0); }
+  else {
+    const nm = $('playerName').value.trim().slice(0, 24) || 'Jugador';
+    game.player = nm; store.set('golfitoJugador', nm); $('playerName').value = nm; ovMode = 'play';
+    game.scores = []; game.windDir = Math.random() * Math.PI * 2; game.windSpeed = 0.5 + Math.random() * 4.5; startHole(0); }
 };
 document.querySelectorAll('.tee-btn').forEach(b => b.onclick = () => {
   game.tee = +b.dataset.tee;
