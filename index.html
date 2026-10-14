@@ -47,6 +47,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); ove
 .wind { display: flex; gap: 10px; align-items: center; }
 .wind svg { width: 34px; height: 34px; transition: transform .3s; }
 .right-col { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+#viewBtn { margin-top: 6px; width: 96px; padding: 7px 4px; color: var(--ink); font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; pointer-events: auto; }
 #map { width: 96px; height: 180px; border-radius: 8px; border: 1px solid var(--panel-edge); background: var(--panel); }
 .hud.bottom { bottom: 0; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); flex-direction: column; align-items: center; }
 .controls { pointer-events: auto; display: flex; flex-direction: column; gap: 8px; width: min(520px, 100%); }
@@ -87,7 +88,7 @@ table.sc th { font-weight: 500; color: var(--ink-dim); text-align: left; font-si
 table.sc tr.hd td { background: rgba(244,240,226,.06); font-weight: 600; }
 table.sc td.cur { outline: 1px solid var(--flag); }
 table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
-@media (max-width: 420px) { .val { font-size: 17px; } #map { width: 74px; height: 140px; } #swing { flex-basis: 108px; font-size: 17px; } table.sc th, table.sc td { padding: 3px 3px; } table.sc { font-size: 12px; } #overlay .card { padding: 16px 12px; } }
+@media (max-width: 420px) { .val { font-size: 17px; } #map { width: 74px; height: 140px; } #viewBtn { width: 74px; font-size: 11px; } #swing { flex-basis: 108px; font-size: 17px; } table.sc th, table.sc td { padding: 3px 3px; } table.sc { font-size: 12px; } #overlay .card { padding: 16px 12px; } }
 @media (prefers-reduced-motion: reduce) { .wind svg { transition: none; } }
 </style>
 </head>
@@ -111,6 +112,7 @@ table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
         <div><div class="val" id="windSpd">0</div><div class="lbl" id="windLbl">viento m/s</div></div>
       </div>
       <canvas id="map" width="192" height="360" aria-label="Mapa del hoyo"></canvas>
+      <button id="viewBtn" class="card" aria-label="Cambiar vista">Vista aérea</button>
     </div>
   </div>
 
@@ -488,7 +490,62 @@ const outer = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.Mesh
 outer.rotation.x = -Math.PI / 2; outer.position.y = -0.8; scene.add(outer);
 
 function hash(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
-let holeGroup = null, trees = [];
+let holeGroup = null, trees = [], terrainMesh = null, aerial = true;
+// Ruido suave (value noise) para dar textura natural al pasto y la arena
+function vnoise(x, z) {
+  const xi = Math.floor(x), zi = Math.floor(z), fx = x - xi, fz = z - zi, u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), d = hash(xi + 1, zi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+// Textura del terreno vista desde arriba: rayado de corte en calle y green, rough con manchas, arena con borde,
+// agua y sombras de los árboles. Se pinta una vez por hoyo en un canvas que se aplica al terreno.
+function bakeTerrain() {
+  const R = terrainMesh.userData.rect, maxT = Math.min(4096, renderer.capabilities.maxTextureSize);
+  const ppm = Math.max(2, Math.min(5, maxT / Math.max(R.W, R.L)));
+  const w = Math.round(R.W * ppm), h = Math.round(R.L * ppm), cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(w, h), d = img.data;
+  const sunX = 0.83, sunZ = -0.55; // sombra hacia donde no da el sol
+  for (let j = 0; j < h; j++) {
+    const z = R.z0 + (j + 0.5) / ppm;
+    for (let i = 0; i < w; i++) {
+      const x = R.x0 + (i + 0.5) / ppm, sf = surfAt(x, z), n1 = vnoise(x * 0.08, z * 0.08), n2 = vnoise(x * 0.6, z * 0.6), g = hash(x * 7.1, z * 3.3);
+      let r, gr, b;
+      if (sf === SURF.GREEN) {
+        const st = Math.floor((x * 0.7 + z * 0.7) / 2.2) % 2 ? 1 : -1;
+        r = 78 + st * 5; gr = 150 + st * 7; b = 60 + st * 3; r += (n2 - 0.5) * 6; gr += (n2 - 0.5) * 8;
+      } else if (sf === SURF.FRINGE) { r = 74; gr = 134; b = 52; r += (n2 - 0.5) * 8; gr += (n2 - 0.5) * 10; }
+      else if (sf === SURF.FAIRWAY || sf === SURF.TEE) {
+        const st = Math.floor(centerInfo(x, z).s / 6) % 2 ? 1 : -1;
+        r = 90 + st * 6 + (n1 - 0.5) * 12; gr = 140 + st * 8 + (n1 - 0.5) * 12; b = 50 + st * 3;
+        r += (g - 0.5) * 6; gr += (g - 0.5) * 6;
+      } else if (sf === SURF.BUNKER) {
+        const e = Math.min(...BUNKERS.map(bk => ell(bk, x, z)));
+        const lip = e > 0.88 ? (e - 0.88) / 0.12 : 0;
+        r = 232 - lip * 40 + (g - 0.5) * 14; gr = 214 - lip * 42 + (g - 0.5) * 12; b = 170 - lip * 46 + (g - 0.5) * 10;
+      } else if (sf === SURF.WATER) {
+        const e = Math.min(...PONDS.map(pd => ell(pd, x, z)));
+        r = 34 + e * 30; gr = 102 + e * 40; b = 150 + e * 30;
+      } else if (sf === SURF.OB) { r = 52 + n1 * 16; gr = 86 + n1 * 18; b = 32 + n1 * 8; r += (g - 0.5) * 10; gr += (g - 0.5) * 10; }
+      else {
+        const dry = vnoise(x * 0.035 + 7, z * 0.035) * 0.7 + n1 * 0.3;
+        r = 62 + dry * 46 + (g - 0.5) * 16; gr = 104 + dry * 22 + (g - 0.5) * 16; b = 36 + dry * 14;
+      }
+      const k = (j * w + i) * 4; d[k] = r; d[k + 1] = gr; d[k + 2] = b; d[k + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // Sombras de los árboles (manchas suaves desplazadas en dirección contraria al sol)
+  for (const t of trees) {
+    const sx = (t.x + sunX * t.h * 0.45 - R.x0) * ppm, sz = (t.z + sunZ * t.h * 0.45 - R.z0) * ppm, rr = t.r * 1.15 * ppm;
+    const gr = ctx.createRadialGradient(sx, sz, rr * 0.2, sx, sz, rr);
+    gr.addColorStop(0, 'rgba(10,30,8,0.42)'); gr.addColorStop(1, 'rgba(10,30,8,0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(sx, sz, rr * 1.25, rr, Math.atan2(sunZ, sunX), 0, 7); ctx.fill();
+  }
+  for (const bd of BUILDINGS) { ctx.fillStyle = 'rgba(10,30,8,0.35)'; ctx.fillRect((bd.x0 + 3 - R.x0) * ppm, (bd.z0 - 2 - R.z0) * ppm, (bd.x1 - bd.x0) * ppm, (bd.z1 - bd.z0) * ppm); }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const m = terrainMesh.material; m.map = tex; m.vertexColors = false; m.color.setRGB(1, 1, 1); m.needsUpdate = true;
+}
 function disposeGroup(g) { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); scene.remove(g); }
 function buildScene(holeIdx) {
   if (holeGroup) disposeGroup(holeGroup);
@@ -512,11 +569,15 @@ function buildScene(holeIdx) {
       col[i * 3] = c.r + n; col[i * 3 + 1] = c.g + n; col[i * 3 + 2] = c.b + n * 0.5;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    // El plano exterior va debajo del punto más bajo del terreno (si no, asoma dentro de los lagos hundidos)
+    let minY = 1e9; for (let i = 0; i < pos.count; i++) minY = Math.min(minY, pos.getY(i));
+    outer.position.y = minY - 0.4;
     geo.computeVertexNormals();
-    holeGroup.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
+    terrainMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })); holeGroup.add(terrainMesh);
+    terrainMesh.userData.rect = { x0: cx - W / 2, z0: cz - L / 2, W, L };
     for (const p of PONDS) {
-      const water = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshPhongMaterial({ color: 0x2f6f8f, shininess: 90, specular: 0x88aacc, transparent: true, opacity: 0.88 }));
-      water.rotation.x = -Math.PI / 2; water.scale.set(p.rx * 1.12, p.rz * 1.12, 1); water.position.set(p.x, p.y, p.z); holeGroup.add(water);
+      const water = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshPhongMaterial({ color: 0x3c95c8, shininess: 120, specular: 0xd8ecf8, transparent: true, opacity: 0.5 }));
+      water.rotation.x = -Math.PI / 2; water.scale.set(p.rx * 1.06, p.rz * 1.06, 1); water.position.set(p.x, p.y, p.z); holeGroup.add(water);
     }
   }
   // Árboles (instanciados) — también son obstáculos físicos
@@ -547,6 +608,7 @@ function buildScene(holeIdx) {
     });
     holeGroup.add(trunkM, pineM, broadM);
   }
+  bakeTerrain();
   // Marcas de salida, hoyo
   for (const t of TEES) for (const dx of [-2.5, 2.5]) {
     const tm = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshLambertMaterial({ color: TEESETS[t.set].color }));
@@ -629,7 +691,12 @@ let trailN = 0;
 const aimGeo = new THREE.BufferGeometry(); aimGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(200 * 3), 3));
 const aimLine = makeRibbon(aimGeo.attributes.position.array, 200, 0xf2c230, 0.95, 2.6);
 let aimN = 0, aimDash = 3;
-const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40), new THREE.MeshBasicMaterial({ color: 0xf2c230, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+const ring = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshBasicMaterial({ map: (() => { // diana de caída
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  [[124, 'rgba(255,255,255,0.95)'], [116, 'rgba(40,120,200,0.55)'], [84, 'rgba(255,255,255,0.9)'], [78, 'rgba(40,120,200,0.6)'], [46, 'rgba(255,255,255,0.95)'], [40, 'rgba(242,120,40,0.85)'], [16, 'rgba(242,194,48,1)']]
+    .forEach(([r, f]) => { x.fillStyle = f; x.beginPath(); x.arc(128, 128, r, 0, 7); x.fill(); });
+  return new THREE.CanvasTexture(c); })(), transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+ring.renderOrder = 3;
 ring.rotation.x = -Math.PI / 2; scene.add(ring);
 
 // ───────────────────────── Estado de juego ─────────────────────────
@@ -912,7 +979,7 @@ function updateAim() {
   }
   aimN = N;
   const tx = ball.p.x + f.x * len, tz = ball.p.z + f.z * len;
-  ring.position.set(tx, H(tx, tz) + 0.08, tz); ring.scale.setScalar(c.putter ? 0.15 : Math.max(1.5, len / 40));
+  ring.position.set(tx, H(tx, tz) + 0.08, tz); ring.scale.setScalar(c.putter ? 0.2 : Math.max(2.2, len / 22));
   aimDash = c.putter ? 2 : 3;
   updateHUD();
 }
@@ -934,6 +1001,9 @@ function fire(pos) {
 const mPct = p => ((p - meter.MIN) / (1 - meter.MIN) * 100) + '%';
 $('accZone').style.left = mPct(meter.ACC);
 $('swing').addEventListener('pointerdown', e => { e.preventDefault(); swingTap(); });
+function setView(a) { aerial = a; $('viewBtn').textContent = a ? 'Vista aérea' : 'Vista detrás'; try { localStorage.setItem('golfitoVista', a ? 'aerea' : 'detras'); } catch (e) {} }
+$('viewBtn').addEventListener('click', () => setView(!aerial));
+try { setView(localStorage.getItem('golfitoVista') !== 'detras'); } catch (e) { setView(true); }
 window.addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); swingTap(); }
   if (game.state !== 'aim' || meter.phase !== 'idle') return;
@@ -1035,10 +1105,18 @@ function frame(now) {
     const putting = c.putter;
     if (game.state === 'aim') {
       const f = fwd(game.aim);
-      const back = putting ? 3.2 : 5, up = putting ? 1.3 : 1.9, ahead = putting ? 6 : 45;
-      wantPos.copy(ball.p).addScaledVector(f, -back); wantPos.y = Math.max(ball.p.y, H(wantPos.x, wantPos.z)) + up;
-      const lx = ball.p.x + f.x * ahead, lz = ball.p.z + f.z * ahead;
-      wantLook.set(lx, (H(lx, lz) + ball.p.y) / 2 + (putting ? 0 : 1), lz);
+      if (aerial && !putting) {
+        // Vista aérea: desde arriba y detrás, se ve la bola abajo y la zona de caída al centro
+        const len = Math.max(40, c.carry * lieFactor(c).v);
+        wantPos.copy(ball.p).addScaledVector(f, -len * 0.5); wantPos.y = ball.p.y + len * 0.5;
+        const lx = ball.p.x + f.x * len * 0.5, lz = ball.p.z + f.z * len * 0.5;
+        wantLook.set(lx, H(lx, lz), lz);
+      } else {
+        const back = putting ? 3.2 : 5, up = putting ? 1.3 : 1.9, ahead = putting ? 6 : 45;
+        wantPos.copy(ball.p).addScaledVector(f, -back); wantPos.y = Math.max(ball.p.y, H(wantPos.x, wantPos.z)) + up;
+        const lx = ball.p.x + f.x * ahead, lz = ball.p.z + f.z * ahead;
+        wantLook.set(lx, (H(lx, lz) + ball.p.y) / 2 + (putting ? 0 : 1), lz);
+      }
       camPos.lerp(wantPos, Math.min(1, dt * 4)); camLook.lerp(wantLook, Math.min(1, dt * 4));
     } else if (game.state !== 'done' && game.state !== 'menu') {
       const hgt = ball.p.y - H(ball.p.x, ball.p.z);
@@ -1047,6 +1125,7 @@ function frame(now) {
     }
     camPos.y = Math.max(camPos.y, H(camPos.x, camPos.z) + 0.6);
     camera.position.copy(camPos); camera.lookAt(camLook);
+    scene.fog.near = 180 + Math.max(0, camPos.y - H(camPos.x, camPos.z)) * 1.5; scene.fog.far = scene.fog.near + 520;
 
     // Bola y elementos visuales
     ballMesh.position.copy(ball.p);
@@ -1070,7 +1149,7 @@ defineHole(0, 1); buildScene(0); placeBall(0, 0, true); aimAt(PIN.x, PIN.z);
 camPos.set(0, 2.2, 6); camLook.set(PIN.x * 0.3, 2, -60);
 drawCourseMap(0);
 requestAnimationFrame(frame);
-window.__golf = { ball, game, CLUBS, flatCarry, shoot, H, surfAt, startHole, HOLES, COURSE, get PIN() { return PIN; }, get CENTER() { return CENTER; } };
+window.__golf = { PONDS: () => PONDS, terrain: () => terrainMesh, placeBall, readyForShot,  ball, game, CLUBS, flatCarry, shoot, H, surfAt, startHole, HOLES, COURSE, get PIN() { return PIN; }, get CENTER() { return CENTER; } };
 })();
 </script>
 
