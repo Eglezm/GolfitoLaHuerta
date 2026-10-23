@@ -218,12 +218,21 @@ const HOLES = [
     bunkers: [{ g: 1, dx: 0, dz: -19.5, rx: 8.5, rz: 3.2 }] },
   // Hoyo 2 (según Enrique y su foto): salida muy estrecha entre árboles; green ancho y poco profundo,
   // búnker delante; si te pasas, una caída fuerte detrás del green aleja la bola.
+  // Fotos del hoyo 2: a la izquierda de la salida una casa blanca con reja, a la derecha el edificio de ladrillo
+  // del hotel; una palmera a la izquierda a media calle y un búnker grande y redondeado delante del green.
   { par: 3, hcp: 16, yd: [78, 84, 97], pin: [-3, 1], slope: [-0.01, 0.02], green: [13, 8.5], wide: 7.5, backDrop: 4,
-    bunkers: [{ g: 1, dx: 3, dz: -12, rx: 8, rz: 3 }] },
+    landmarks: [{ name: 'Palmera', palm: true, fromTee: 48, off: -8.5, h: 9, r: 2.2 }],
+    buildings: [{ name: 'edificio', wall: 0xe9e6dc, fromTee: -4, off: -12, w: 8, l: 18, h: 6 },
+                { name: 'hotel', wall: 0xa8694a, fromTee: 6, off: 12.5, w: 9, l: 20, h: 11 }],
+    bunkers: [{ g: 1, dx: 2, dz: -13.5, rx: 9.5, rz: 4.5 }] },
   // Hoyo 3 (según Enrique y su foto): lago delante del green que tapa casi toda la entrada; solo queda
   // un paso de ~1,5 m a la derecha para llegar rodando, y más a la derecha están los árboles que lo separan del 1.
   { par: 3, hcp: 6,  yd: [116, 124, 136], pin: [0, 1], slope: [0.008, 0.018], green: [9.5, 8.5], wide: 6,
-    ponds: [{ g: 1, dx: -3.5, dz: -20, rx: 9, rz: 7.5 }] },
+    // Fotos del hoyo 3: salida en un pasillo largo de cedros altos; el lago tiene orilla de piedra y un plátano
+    // en la orilla; detrás del green, a la derecha, una palapa de teja.
+    ponds: [{ g: 1, dx: -3.5, dz: -20, rx: 9, rz: 7.5, stone: true }],
+    landmarks: [{ name: 'Plátano', palm: true, g: 1, dx: -6, dz: -11.5, h: 3.5, r: 1.6 }],
+    buildings: [{ name: 'palapa', wall: 0xd9c9a8, roof: 0xa4553a, toGreen: -14, off: 15, w: 5, l: 5, h: 3 }] },
   // Hoyo 4 (según Enrique y su foto): sales de una pequeña meseta; un lago ancho cubre todo el frente
   // y hay que cruzarlo por fuerza; el green empieza unos 2 m después del agua. Detrás del green, un búnker
   // metido en una pendiente que sube (backDrop negativo = subida), del que cuesta salir.
@@ -427,7 +436,7 @@ function defineHole(i, teeSet) {
   const sp = (s, off) => pointAt(back + s * L, off);
     const sOf = o => o.afterCorner != null ? back + COURSE[i].legA + o.afterCorner : o.fromTee != null ? back + o.fromTee / YD : back + L - o.toGreen / YD;
     CLEARINGS = (holeSpec.clearings || []).map(o => { const c = pointAt(sOf(o), o.off); return { x0: c.x - o.w / 2, x1: c.x + o.w / 2, z0: c.z - o.l / 2, z1: c.z + o.l / 2 }; });
-    LANDMARKS = (holeSpec.landmarks || []).map(o => Object.assign(pointAt(sOf(o), o.off), o));
+    LANDMARKS = (holeSpec.landmarks || []).map(o => Object.assign(o.g ? gp(o.dx, o.dz) : pointAt(sOf(o), o.off), o));
     // Construcciones (solo en hoyos rectos: ejes alineados con el hoyo)
     BUILDINGS = (holeSpec.buildings || []).map(o => { const c = pointAt(sOf(o), o.off), y0 = baseH(c.x, c.z);
       return Object.assign({ x0: c.x - o.w / 2, x1: c.x + o.w / 2, z0: c.z - o.l / 2, z1: c.z + o.l / 2, y0, y1: y0 + o.h }, o); });
@@ -439,7 +448,7 @@ function defineHole(i, teeSet) {
     fwHalf: par4 ? (s => 10 + 1.5 * Math.sin(s * 0.04)) : (() => 8),
   };
   BUNKERS = (holeSpec.bunkers || []).map(o => Object.assign(place(o), { depth: 0.6 }));
-  PONDS = (holeSpec.ponds || []).map(o => { const p = place(o); p.y = baseH(p.x, p.z) - 0.5; return p; });
+  PONDS = (holeSpec.ponds || []).map(o => { const p = place(o); p.stone = o.stone; p.y = baseH(p.x, p.z) - 0.5; return p; });
   GREEN_H = baseH(gx, gz) + 0.4 + (holeSpec.rise || 0);
   TEES = holeSpec.yd.map((y, k) => { const z = (y - holeSpec.yd[1]) / YD; return { x: 0, z, h: baseH(0, z) + 0.35 + (holeSpec.teeRise || 0), set: k }; });
   const xs = CENTER.map(c => c[0]), zs = CENTER.map(c => c[1]);
@@ -577,7 +586,9 @@ function bakeTerrain() {
         r = 206 - lip * 40 + (g - 0.5) * 12; gr = 201 - lip * 42 + (g - 0.5) * 12; b = 186 - lip * 46 + (g - 0.5) * 10;
       } else if (sf === SURF.WATER) {
         const e = Math.min(...PONDS.map(pd => ell(pd, x, z)));
-        r = 34 + e * 30; gr = 102 + e * 40; b = 150 + e * 30;
+        r = 46 + e * 22; gr = 64 + e * 26; b = 52 + e * 16;
+      } else if (PONDS.some(pd => pd.stone && ell(pd, x, z) < 1.12)) { // orilla de piedra
+        const st = vnoise(x * 1.6, z * 1.6); r = 150 + st * 40 + (g - 0.5) * 30; gr = 146 + st * 36 + (g - 0.5) * 30; b = 130 + st * 30 + (g - 0.5) * 24;
       } else if (sf === SURF.OB) { r = 52 + n1 * 16; gr = 86 + n1 * 18; b = 32 + n1 * 8; r += (g - 0.5) * 10; gr += (g - 0.5) * 10; }
       else {
         const dry = vnoise(x * 0.035 + 7, z * 0.035) * 0.7 + n1 * 0.3;
@@ -637,7 +648,7 @@ function buildScene(holeIdx) {
     terrainMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })); holeGroup.add(terrainMesh);
     terrainMesh.userData.rect = { x0: cx - W / 2, z0: cz - L / 2, W, L };
     for (const p of PONDS) {
-      const water = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshPhongMaterial({ color: 0x3c95c8, shininess: 120, specular: 0xd8ecf8, transparent: true, opacity: 0.5 }));
+      const water = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshPhongMaterial({ color: 0x6f8a78, shininess: 90, specular: 0xc8d4d8, transparent: true, opacity: 0.45 }));
       water.rotation.x = -Math.PI / 2; water.scale.set(p.rx * 1.06, p.rz * 1.06, 1); water.position.set(p.x, p.y, p.z); holeGroup.add(water);
     }
   }
@@ -698,7 +709,19 @@ function buildScene(holeIdx) {
     const tm = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshLambertMaterial({ color: TEESETS[t.set].color }));
     tm.position.set(t.x + dx, t.h + 0.08, t.z - 1); holeGroup.add(tm);
   }
-  for (const bd of BUILDINGS) { // pádel techado: techo de lámina sobre columnas, cancha con malla y cristal
+  for (const bd of BUILDINGS.filter(b => b.wall)) { // edificios macizos (casa, hotel): muros con ventanas y azotea
+    const w = bd.x1 - bd.x0, l = bd.z1 - bd.z0, cx = (bd.x0 + bd.x1) / 2, cz = (bd.z0 + bd.z1) / 2;
+    const tex = facadeTexture(bd.wall, Math.max(1, Math.round(bd.h / 3)));
+    const side = (span) => { const t = tex.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, Math.round(span / 4)), 1); return new THREE.MeshLambertMaterial({ map: t }); };
+    const top = new THREE.MeshLambertMaterial({ color: new THREE.Color(bd.wall).multiplyScalar(0.7) });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(w, bd.h, l), [side(l), side(l), top, top, side(w), side(w)]);
+    box.position.set(cx, bd.y0 + bd.h / 2, cz); holeGroup.add(box);
+    if (bd.roof) { // techo de teja a cuatro aguas
+      const rf = new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(w, l) / 2 + 0.6, 1.6, 4), new THREE.MeshLambertMaterial({ color: bd.roof }));
+      rf.rotation.y = Math.PI / 4; rf.scale.set(w / Math.max(w, l), 1, l / Math.max(w, l)); rf.position.set(cx, bd.y1 + 0.8, cz); holeGroup.add(rf);
+    }
+  }
+  for (const bd of BUILDINGS.filter(b => !b.wall)) { // pádel techado: techo de lámina sobre columnas, cancha con malla y cristal
     const w = bd.x1 - bd.x0, l = bd.z1 - bd.z0, cx = (bd.x0 + bd.x1) / 2, cz = (bd.z0 + bd.z1) / 2;
     const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.35, l + 0.6), new THREE.MeshLambertMaterial({ color: 0xc9ccc8 }));
     roof.position.set(cx, bd.y1 - 0.17, cz); holeGroup.add(roof);
@@ -722,6 +745,17 @@ function buildScene(holeIdx) {
   cup.rotation.x = -Math.PI / 2; cup.position.set(PIN.x, PIN_Y + 0.012, PIN.z); holeGroup.add(cup);
   flag.position.set(PIN.x, PIN_Y, PIN.z);
   drawMapBg();
+}
+// Fachada con ventanas para edificios macizos (una fila de ventanas por piso)
+function facadeTexture(wall, floors) {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64 * floors; const x = c.getContext('2d');
+  x.fillStyle = '#' + new THREE.Color(wall).getHexString(); x.fillRect(0, 0, c.width, c.height);
+  for (let f = 0; f < floors; f++) {
+    x.fillStyle = 'rgba(0,0,0,0.08)'; x.fillRect(0, f * 64 + 60, 64, 4);
+    x.fillStyle = '#3a4248'; x.fillRect(20, f * 64 + 16, 24, 28);
+    x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(22, f * 64 + 18, 9, 24);
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; return t;
 }
 // Bandera
 const flag = new THREE.Group();
