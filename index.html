@@ -575,8 +575,8 @@ function bakeTerrain() {
       let r, gr, b;
       if (sf === SURF.GREEN) {
         const st = Math.floor((x * 0.7 + z * 0.7) / 2.2) % 2 ? 1 : -1;
-        r = 150 + st * 4; gr = 176 + st * 5; b = 90 + st * 3; r += (n2 - 0.5) * 6; gr += (n2 - 0.5) * 8;
-      } else if (sf === SURF.FRINGE) { r = 96; gr = 124; b = 60; r += (n2 - 0.5) * 8; gr += (n2 - 0.5) * 10; }
+        r = 108 + st * 4; gr = 154 + st * 5; b = 64 + st * 3; r += (n2 - 0.5) * 6; gr += (n2 - 0.5) * 8;
+      } else if (sf === SURF.FRINGE) { r = 86; gr = 118; b = 52; r += (n2 - 0.5) * 8; gr += (n2 - 0.5) * 10; }
       else if (sf === SURF.FAIRWAY || sf === SURF.TEE) {
         const st = Math.floor(centerInfo(x, z).s / 6) % 2 ? 1 : -1;
         r = 124 + st * 4 + (n1 - 0.5) * 14; gr = 146 + st * 5 + (n1 - 0.5) * 12; b = 72 + st * 2;
