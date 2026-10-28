@@ -3,7 +3,8 @@
 //   POST /api/game  { player, tee }     → crea una partida con código de 4 letras (mismo viento y salidas para todos)
 //   POST /api/game/CODE/join { player } → entra a la partida
 //   POST /api/game/CODE/score { player, scores } → guarda los golpes del jugador hoyo por hoyo
-//   GET  /api/game/CODE                 → partida y jugadores (tarjeta en vivo)
+//   POST /api/game/CODE/ball { player, ball } → posición de la bola y trayectoria del último tiro
+//   GET  /api/game/CODE                 → partida, jugadores (tarjeta en vivo) y bolas
 //   POST /api/round { player, tee, scores } → ronda completa al ranking compartido
 //   GET  /api/ranking                   → ranking compartido
 import { getStore } from '@netlify/blobs';
@@ -45,7 +46,21 @@ export function makeHandler(store) {
         const { blobs } = await store.list({ prefix: `g/${code}/p/` });
         return (await Promise.all(blobs.map(x => store.get(x.key, { type: 'json' })))).filter(Boolean);
       };
-      if (req.method === 'GET' && !b) return json({ ...meta, players: await listPlayers() });
+      if (req.method === 'GET' && !b) {
+        const { blobs } = await store.list({ prefix: `g/${code}/b/` });
+        const balls = (await Promise.all(blobs.map(x => store.get(x.key, { type: 'json' })))).filter(Boolean);
+        return json({ ...meta, players: await listPlayers(), balls });
+      }
+      if (req.method === 'POST' && b === 'ball') {
+        const player = cleanName(body.player), bl = body.ball || {};
+        const num = v => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 5000;
+        const path = Array.isArray(bl.path) ? bl.path.slice(0, 160) : [];
+        if (!player || !Number.isInteger(bl.hole) || bl.hole < 0 || bl.hole >= HOLES || !num(bl.x) || !num(bl.z) || !Number.isInteger(bl.shot) || bl.shot < 0
+          || !path.every(q => Array.isArray(q) && q.length === 4 && q.every(num))) return json({ error: 'Bola inválida' }, 400);
+        if (!(await store.get(`g/${code}/p/${keyName(player)}`))) return json({ error: 'No estás en esta partida' }, 404);
+        await store.setJSON(`g/${code}/b/${keyName(player)}`, { name: player, hole: bl.hole, x: bl.x, z: bl.z, shot: bl.shot, strokes: Number.isInteger(bl.strokes) ? bl.strokes : 0, holed: !!bl.holed, path, t: Date.now() });
+        return json({ ok: true });
+      }
       if (req.method === 'POST' && (b === 'join' || b === 'score')) {
         const player = cleanName(body.player); if (!player) return json({ error: 'Falta el nombre' }, 400);
         const key = `g/${code}/p/${keyName(player)}`, prev = await store.get(key, { type: 'json' });

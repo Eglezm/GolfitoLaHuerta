@@ -845,6 +845,7 @@ const ballMark = (() => {
 const shadow = new THREE.Mesh(new THREE.CircleGeometry(BR * 1.2, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
 shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
 const TRAIL_MAX = 4000;
+const shotRec = { pts: [], t: 0, next: 0, seq: 0 }; // trayectoria del último tiro (para que la vean los amigos)
 const trailGeo = new THREE.BufferGeometry(); trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 3), 3)); trailGeo.setDrawRange(0, 0);
 // En WebGL las líneas siempre miden 1 px: la estela y la línea de tiro se dibujan como cintas que miran a la cámara,
 // con un grosor fijo en píxeles de pantalla (se ven igual de gruesas cerca y lejos).
@@ -928,6 +929,7 @@ function startHole(i) {
   trailN = 0; trailGeo.setDrawRange(0, 0);
   $('holeName').textContent = `Golfito La Huerta · Hoyo ${i + 1}`;
   $('holeSub').textContent = `Par ${holeSpec.par} · ${holeSpec.yd[game.tee]} yd · Ventaja ${holeSpec.hcp}`;
+  shotRec.pts = []; onlineBall(); clearGhosts();
   readyForShot(true);
 }
 function readyForShot(first) {
@@ -952,7 +954,7 @@ function shoot(power, err) {
   game.prev.copy(ball.p); ball.start.copy(ball.p); game.strokes++;
   const startDir = game.aim + (err * (club.putter ? 1.2 : 4) + (Math.random() - 0.5) * 0.6) * Math.PI / 180;
   const f = fwd(startDir); game.shotDir.copy(f);
-  ball.carry = 0; ball.landed = false; ball.rollT = 0; trailN = 0;
+  ball.carry = 0; ball.landed = false; ball.rollT = 0; trailN = 0; shotRec.pts = []; shotRec.t = 0; shotRec.next = 0;
   if (club.putter) {
     const n = normalAt(ball.p.x, ball.p.z);
     ball.v.copy(f).addScaledVector(n, -f.dot(n)).normalize().multiplyScalar(club.v * power * lf.v);
@@ -1060,7 +1062,7 @@ function penalty(s, msg) {
   toast(msg || (s === SURF.WATER ? 'Al agua · +1 golpe' : 'Fuera de límites · +1 golpe'), 2200);
   setTimeout(() => {
     placeBall(game.prev.x, game.prev.z, false); ball.surf = surfAt(game.prev.x, game.prev.z);
-    trailN = 0; trailGeo.setDrawRange(0, 0); readyForShot();
+    trailN = 0; trailGeo.setDrawRange(0, 0); onlineBall(); readyForShot();
   }, 2200);
 }
 function scoreName(d, n) {
@@ -1071,13 +1073,14 @@ function finishShot() {
   if (game.holed) {
     game.state = 'done';
     game.scores[game.hole] = game.strokes;
-    onlineScore();
+    onlineScore(); onlineBall(true);
     setTimeout(showHoleResult, 900);
     return;
   }
   const club = CLUBS[game.club];
   const total = Math.hypot(ball.p.x - ball.start.x, ball.p.z - ball.start.z);
   toast(club.putter ? `${club.name} · ${yd(total)}` : `${club.name} · vuelo ${yd(ball.carry)} · total ${yd(total)}`, 2200);
+  onlineBall();
   readyForShot();
 }
 
@@ -1230,7 +1233,7 @@ function refreshOnlineBox() {
   }
 }
 function onlineState(st) {
-  online.meta = st; const prev = online.players; online.players = st.players || [];
+  online.meta = st; const prev = online.players; online.players = st.players || []; updateGhosts(st.balls || []);
   // Aviso cuando un amigo termina un hoyo
   for (const p of online.players) {
     const k = normName(p.name), n = p.scores.filter(v => v != null).length;
@@ -1263,7 +1266,7 @@ function renderFriends() {
 async function pollGame() {
   clearTimeout(online.timer); if (!online.code) return;
   if (!document.hidden) { try { onlineState(await api('GET', `/game/${online.code}`)); } catch (e) {} }
-  online.timer = setTimeout(pollGame, 5000);
+  online.timer = setTimeout(pollGame, game.state !== 'menu' && $('overlay').hidden ? 3000 : 6000);
 }
 async function enterGame(st, player) {
   online.code = st.code; online.player = player; online.seen = {}; saveOnline(); onlineState(st); refreshOnlineBox(); pollGame();
@@ -1271,6 +1274,60 @@ async function enterGame(st, player) {
 function onlineScore() {
   if (!online.code) return;
   api('POST', `/game/${online.code}/score`, { player: online.player, scores: game.scores.slice(0, game.hole + 1).map(v => v ?? null) }).then(pollGame).catch(() => {});
+}
+function onlineBall(holed) {
+  if (!online.code) return;
+  const ball2 = { hole: game.hole, x: Math.round(ball.p.x * 100) / 100, z: Math.round(ball.p.z * 100) / 100, shot: game.strokes, strokes: game.strokes, holed: !!holed, path: shotRec.pts };
+  api('POST', `/game/${online.code}/ball`, { player: online.player, ball: ball2 }).catch(() => {});
+}
+// Bolas de los amigos: misma geometría del hoyo en todos los cels, así que las coordenadas coinciden
+const GHOST_COLORS = ['#4fc3f7', '#ff8a65', '#ba68c8', '#81c784', '#f06292', '#ffd54f', '#90a4ae'];
+const ghosts = new Map();
+function ghostLabel(name, color) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d');
+  x.font = '600 30px "Barlow Semi Condensed", sans-serif'; const w = Math.min(200, x.measureText(name).width);
+  x.fillStyle = 'rgba(14,30,20,.78)'; x.beginPath(); x.roundRect ? x.roundRect(4, 10, w + 58, 44, 22) : x.rect(4, 10, w + 58, 44); x.fill();
+  x.fillStyle = color; x.beginPath(); x.arc(28, 32, 11, 0, 7); x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 3; x.stroke();
+  x.fillStyle = '#f4f0e2'; x.textBaseline = 'middle'; x.fillText(name, 48, 33, 200);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), sizeAttenuation: false, depthTest: false, transparent: true }));
+  sp.center.set(28 / 256, 0.5); sp.renderOrder = 4; return sp;
+}
+function ghostFor(name) {
+  const k = normName(name); let g = ghosts.get(k); if (g) return g;
+  const color = GHOST_COLORS[ghosts.size % GHOST_COLORS.length];
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(BR, 14, 10), new THREE.MeshLambertMaterial({ color, emissive: new THREE.Color(color).multiplyScalar(0.35) }));
+  const label = ghostLabel(name, color), src = new Float32Array(150 * 3), rib = makeRibbon(src, 150, new THREE.Color(color).getHex(), 0.8, 2);
+  mesh.visible = label.visible = rib.visible = false; scene.add(mesh, label);
+  g = { name, mesh, label, rib, src, ribN: 0, data: null, lastShot: null, anim: null }; ghosts.set(k, g); return g;
+}
+function clearGhosts() { ghosts.forEach(g => { g.lastShot = null; g.anim = null; g.ribN = 0; }); }
+function updateGhosts(balls) {
+  for (const b of balls) {
+    if (normName(b.name) === normName(online.player)) continue;
+    const g = ghostFor(b.name), same = b.hole === game.hole;
+    if (same && g.lastShot != null && b.shot > g.lastShot && b.path.length > 1) g.anim = { path: b.path, t0: performance.now() };
+    g.lastShot = same ? b.shot : null; g.data = b;
+  }
+}
+function drawGhosts(now) {
+  ghosts.forEach(g => {
+    const b = g.data, show = !!b && online.code && game.state !== 'menu' && b.hole === game.hole && (!b.holed || g.anim);
+    g.mesh.visible = g.label.visible = !!show; g.rib.visible = !!show && g.ribN > 1; if (!show) return;
+    let x = b.x, z = b.z, y = H(b.x, b.z) + BR;
+    if (g.anim) {
+      const P = g.anim.path, t = (now - g.anim.t0) / 1000;
+      if (t >= P[P.length - 1][3] + 1.5) { g.anim = null; g.ribN = 0; }
+      else {
+        let i = 0; while (i < P.length - 2 && P[i + 1][3] < t) i++;
+        const a = P[i], c = P[i + 1], u = Math.max(0, Math.min(1, (t - a[3]) / Math.max(0.01, c[3] - a[3])));
+        x = a[0] + (c[0] - a[0]) * u; y = a[1] + (c[1] - a[1]) * u; z = a[2] + (c[2] - a[2]) * u;
+        g.ribN = i + 1; for (let k = 0; k <= i; k++) g.src.set(P[k].slice(0, 3), k * 3); g.src.set([x, y, z], (i + 1) * 3); g.ribN = i + 2;
+      }
+    }
+    g.mesh.position.set(x, y, z); g.mesh.scale.setScalar(Math.max(1, camera.position.distanceTo(g.mesh.position) / 9));
+    g.label.position.set(x, y, z); g.label.scale.set(0.2, 0.05, 1);
+    if (g.rib.visible) g.rib.update(g.ribN, camera);
+  });
 }
 function postRound() {
   const r = { player: game.player, tee: game.tee, scores: game.scores.slice(), game: online.code };
@@ -1456,6 +1513,7 @@ function frame(now) {
       acc -= 1 / 240; step(1 / 240);
       if (ball.mode !== 'air' && ball.mode !== 'roll') break;
       if (trailN < TRAIL_MAX && ball.mode === 'air') { trailGeo.attributes.position.setXYZ(trailN++, ball.p.x, ball.p.y, ball.p.z); }
+      shotRec.t += 1 / 240; if (shotRec.t >= shotRec.next && shotRec.pts.length < 150) { shotRec.pts.push([ball.p.x, ball.p.y, ball.p.z, shotRec.t].map(v => Math.round(v * 100) / 100)); shotRec.next += 0.1; }
     }
     trailGeo.setDrawRange(0, trailN); trailGeo.attributes.position.needsUpdate = true;
     if (ball.mode === 'rest') { game.state = 'resting'; game.restTimer = game.holed ? 0.2 : 1.1; acc = 0; }
@@ -1502,6 +1560,7 @@ function frame(now) {
     ballMark.scale.setScalar(0.055 * (720 / Math.max(480, renderer.domElement.clientHeight)) ** 0.3);
     const gh = H(ball.p.x, ball.p.z); shadow.position.set(ball.p.x, gh + 0.01, ball.p.z);
     shadow.scale.setScalar(Math.max(1, cd / 14) * (1 + Math.min(3, (ball.p.y - gh) * 0.05))); shadow.visible = ball.p.y - gh < 60;
+    drawGhosts(now);
     if (slopeArrows) { slopeArrows.visible = game.state === 'aim' && CLUBS[game.club].putter && ell(GREEN, ball.p.x, ball.p.z) < 1.6; updateSlopeArrows(now); }
     const showAim = game.state === 'aim'; aimLine.visible = ring.visible = showAim; trail.visible = !showAim || trailN > 0;
     if (showAim) aimLine.update(aimN, camera, aimDash); if (trail.visible) trail.update(trailN, camera);
