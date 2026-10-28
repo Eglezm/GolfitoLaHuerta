@@ -98,7 +98,17 @@ table.sc th { font-weight: 500; color: var(--ink-dim); text-align: left; font-si
 table.sc tr.hd td { background: rgba(244,240,226,.06); font-weight: 600; }
 table.sc td.cur { outline: 1px solid var(--flag); }
 table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
-@media (max-width: 420px) { .val { font-size: 17px; } #map { width: 74px; height: 140px; } #viewBtn, #exitBtn { width: 74px; font-size: 11px; } .name-box input { width: 160px; } #altBox { width: 74px; height: 150px; } #altRange { width: 96px; } #swing { flex-basis: 108px; font-size: 17px; } table.sc th, table.sc td { padding: 3px 3px; } table.sc { font-size: 12px; } #overlay .card { padding: 16px 12px; } }
+.online { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+.online .row2 { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.online .secondary { margin-top: 0; padding: 7px 12px; font-size: 15px; }
+#codeIn { width: 92px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--panel-edge); background: rgba(244,240,226,.08); color: var(--ink); font: 600 17px var(--f-display, inherit); letter-spacing: .2em; text-transform: uppercase; text-align: center; }
+#codeIn:focus { outline: 2px solid var(--flag); outline-offset: 1px; }
+.code-pill { font-family: var(--f-display); font-weight: 700; font-size: 22px; letter-spacing: .2em; color: var(--flag); }
+#onlineMsg { min-height: 1em; text-transform: none; letter-spacing: 0; }
+#friendsBtn { margin-top: 6px; width: 96px; padding: 7px 4px; color: var(--flag); font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; pointer-events: auto; }
+#friends { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 128px); max-width: calc(100% - 140px); pointer-events: auto; padding: 8px 10px; }
+#friends table.sc { font-size: 12px; margin: 0; }
+@media (max-width: 420px) { .val { font-size: 17px; } #map { width: 74px; height: 140px; } #viewBtn, #exitBtn, #friendsBtn { width: 74px; font-size: 11px; } #friends { max-width: calc(100% - 110px); } .name-box input { width: 160px; } #altBox { width: 74px; height: 150px; } #altRange { width: 96px; } #swing { flex-basis: 108px; font-size: 17px; } table.sc th, table.sc td { padding: 3px 3px; } table.sc { font-size: 12px; } #overlay .card { padding: 16px 12px; } }
 @media (prefers-reduced-motion: reduce) { .wind svg { transition: none; } }
 </style>
 </head>
@@ -124,10 +134,12 @@ table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
       <canvas id="map" width="192" height="360" aria-label="Mapa del hoyo"></canvas>
       <button id="viewBtn" class="card" aria-label="Cambiar vista">Vista aérea</button>
       <button id="exitBtn" class="card" aria-label="Salir al inicio">Salir</button>
+      <button id="friendsBtn" class="card" aria-label="Ver la tarjeta de la partida" aria-expanded="false" hidden>Amigos</button>
       <div id="altBox" class="card"><span>Alto</span><input id="altRange" type="range" min="0" max="100" value="75" aria-label="Altura de la cámara"><span>Bajo</span></div>
     </div>
   </div>
 
+  <div id="friends" class="card" hidden aria-live="polite"></div>
   <div id="toast" class="card" style="opacity:0"></div>
   <div id="hint">Arrastra para apuntar · Pulsa GOLPEAR tres veces: iniciar, potencia y precisión</div>
 
@@ -164,6 +176,13 @@ table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
       <label class="name-box" id="nameBox"><span>Jugador</span>
         <input id="playerName" type="text" maxlength="24" autocomplete="off" placeholder="Tu nombre" list="playerList" enterkeyhint="done"></label>
       <datalist id="playerList"></datalist>
+      <div class="online" id="onlineBox" hidden>
+        <div class="rank-h">Jugar con amigos</div>
+        <div class="row2" id="onlineIdle"><button class="secondary" id="createBtn">Crear partida</button><span class="lbl">o</span>
+          <input id="codeIn" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="Código" aria-label="Código de la partida" enterkeyhint="go"><button class="secondary" id="joinBtn">Unirse</button></div>
+        <div class="row2" id="onlineOn" hidden><span class="lbl">Partida</span><span class="code-pill" id="onlineCode"></span><button class="secondary" id="shareBtn">Compartir</button><button class="secondary" id="leaveBtn">Dejar</button></div>
+        <div class="lbl" id="onlineMsg"></div>
+      </div>
       <canvas id="courseMap" width="520" height="400" aria-label="Mapa del campo con los 9 hoyos"></canvas>
       <div class="sc-wrap" id="scWrap" hidden></div>
       <div class="ov-actions"><button class="secondary" id="rankBtn">Ranking</button><button class="primary" id="ovBtn">Empezar</button></div>
@@ -1052,6 +1071,7 @@ function finishShot() {
   if (game.holed) {
     game.state = 'done';
     game.scores[game.hole] = game.strokes;
+    onlineScore();
     setTimeout(showHoleResult, 900);
     return;
   }
@@ -1104,9 +1124,9 @@ function saveRound() {
   r.push({ player: game.player, date: new Date().toISOString(), tee: game.tee, scores: game.scores.slice(), total: tot });
   store.set('golfitoRondas', r); return tot;
 }
-function standings() {
+function standings(list = rounds()) {
   const by = {};
-  for (const r of rounds()) { const k = r.player.trim().toLowerCase(); (by[k] = by[k] || { name: r.player, list: [] }).list.push(r); }
+  for (const r of list) { const k = r.player.trim().toLowerCase(); (by[k] = by[k] || { name: r.player, list: [] }).list.push(r); }
   return Object.values(by).map(p => {
     const tots = p.list.map(r => r.total), best = Math.min(...tots), bestR = p.list.find(r => r.total === best);
     return { name: p.list[p.list.length - 1].player, n: tots.length, best, bestTee: bestR.tee, avg: tots.reduce((a, b) => a + b, 0) / tots.length };
@@ -1117,10 +1137,10 @@ function refreshPlayerList() {
   if (!$('playerName').value) $('playerName').value = store.get('golfitoJugador', '');
 }
 const fmtPar = d => d === 0 ? 'E' : (d > 0 ? '+' : '') + d;
-function rankingHTML() {
-  const st = standings(), rs = rounds().slice(-10).reverse();
-  if (!st.length) return '<p>Aún no hay rondas completas. Termina los 9 hoyos para entrar al ranking.</p>';
-  let h = '<div class="rank-h">Mejores jugadores</div><table class="sc"><tr class="hd"><th>#</th><th>Jugador</th><th>Mejor</th><th>Prom.</th><th>Rondas</th></tr>';
+function rankingHTML(list = rounds(), where = '') {
+  const st = standings(list), rs = list.slice().sort((a, b) => a.date < b.date ? -1 : 1).slice(-10).reverse();
+  if (!st.length) return `<div class="rank-h">${where}</div><p>Aún no hay rondas completas. Termina los 9 hoyos para entrar al ranking.</p>`;
+  let h = `<div class="rank-h">Mejores jugadores${where ? ' · ' + where : ''}</div><table class="sc"><tr class="hd"><th>#</th><th>Jugador</th><th>Mejor</th><th>Prom.</th><th>Rondas</th></tr>`;
   st.forEach((p, i) => { h += `<tr><td>${i + 1}</td><td class="nm">${esc(p.name)}</td><td>${p.best} <small>(${fmtPar(p.best - PAR_TOTAL)})</small></td><td>${p.avg.toFixed(1)}</td><td>${p.n}</td></tr>`; });
   h += '</table><div class="rank-h">Últimas rondas</div><table class="sc"><tr class="hd"><th>Fecha</th><th>Jugador</th><th>Salidas</th><th>Golpes</th></tr>';
   rs.forEach(r => { const d = new Date(r.date); h += `<tr><td>${d.getDate()}/${d.getMonth() + 1}</td><td class="nm">${esc(r.player)}</td><td>${TEESETS[r.tee].name}</td><td>${r.total} <small>(${fmtPar(r.total - PAR_TOTAL)})</small></td></tr>`; });
@@ -1133,10 +1153,13 @@ function showStart() {
 }
 function showRanking() {
   ovMode = 'ranking';
-  showOverlay({ eyebrow: 'Solo rondas completas de 9 hoyos', title: 'Ranking', text: '', button: 'Volver', card: rankingHTML() });
+  const local = rankingHTML(rounds(), online.ok ? 'en este cel' : '');
+  showOverlay({ eyebrow: 'Solo rondas completas de 9 hoyos', title: 'Ranking', text: '', button: 'Volver', card: online.ok ? '<div id="netRank"><p>Cargando el ranking en línea…</p></div>' + local : local });
+  if (online.ok) api('GET', '/ranking').then(r => { const el = $('netRank'); if (el) el.innerHTML = rankingHTML(r.rounds, 'en línea'); })
+    .catch(() => { const el = $('netRank'); if (el) el.innerHTML = '<p>No se pudo cargar el ranking en línea.</p>'; });
 }
 function showOverlay({ eyebrow, title, text, button, tees, card, map }) {
-  $('nameBox').hidden = !tees; $('rankBtn').hidden = !tees; if (tees) refreshPlayerList(); $('ovText').hidden = !text;
+  $('nameBox').hidden = !tees; $('rankBtn').hidden = !tees; $('onlineBox').hidden = !tees || !online.ok; if (tees) refreshOnlineBox(); if (tees) refreshPlayerList(); $('ovText').hidden = !text;
   $('courseMap').hidden = map == null; if (map != null) drawCourseMap(map);
   $('ovEyebrow').textContent = eyebrow; $('ovTitle').textContent = title; $('ovText').textContent = text;
   $('ovBtn').textContent = button; $('teePick').hidden = !tees;
@@ -1147,12 +1170,12 @@ function showHoleResult() {
   if (ovMode !== 'play') return; // salió al inicio mientras la bola rodaba
   const i = game.hole, last = i === HOLES.length - 1, c = scorecardHTML(i);
   if (!last) {
-    showOverlay({ eyebrow: `Hoyo ${i + 1} terminado`, title: scoreName(game.strokes - holeSpec.par, game.strokes), text: `${game.strokes} golpe${game.strokes > 1 ? 's' : ''} · par ${holeSpec.par}`, button: `Ir al hoyo ${i + 2}`, card: c.html, map: i + 1 });
+    showOverlay({ eyebrow: `Hoyo ${i + 1} terminado`, title: scoreName(game.strokes - holeSpec.par, game.strokes), text: `${game.strokes} golpe${game.strokes > 1 ? 's' : ''} · par ${holeSpec.par}`, button: `Ir al hoyo ${i + 2}`, card: c.html + friendsCard(), map: i + 1 });
   } else {
     const d = c.tot - c.totPar;
-    saveRound(); ovMode = 'start';
+    saveRound(); postRound(); ovMode = 'start';
     const pos = standings().findIndex(p => p.name.trim().toLowerCase() === game.player.trim().toLowerCase()) + 1;
-    showOverlay({ eyebrow: `Ronda terminada · ${game.player}`, title: `${c.tot} golpes`, text: (d === 0 ? `Par del campo (${PAR_TOTAL})` : `${d > 0 ? '+' : ''}${d} sobre par ${PAR_TOTAL}`) + ` · lugar ${pos} en el ranking`, button: 'Jugar otra ronda', tees: true, card: c.html, map: -1 });
+    showOverlay({ eyebrow: `Ronda terminada · ${game.player}`, title: `${c.tot} golpes`, text: (d === 0 ? `Par del campo (${PAR_TOTAL})` : `${d > 0 ? '+' : ''}${d} sobre par ${PAR_TOTAL}`) + ` · lugar ${pos} en el ranking`, button: 'Jugar otra ronda', tees: true, card: c.html + friendsCard(), map: -1 });
   }
 }
 $('rankBtn').onclick = showRanking;
@@ -1168,12 +1191,127 @@ $('ovBtn').onclick = () => {
   else {
     const nm = $('playerName').value.trim().slice(0, 24) || 'Jugador';
     game.player = nm; store.set('golfitoJugador', nm); $('playerName').value = nm; ovMode = 'play';
-    game.scores = []; game.windDir = Math.random() * Math.PI * 2; game.windSpeed = 0.5 + Math.random() * 4.5; startHole(0); }
+    game.scores = []; game.windDir = Math.random() * Math.PI * 2; game.windSpeed = 0.5 + Math.random() * 4.5;
+    if (online.code) { // partida con amigos: mismas salidas y mismo viento para todos
+      const m = online.meta; game.tee = m.tee; game.windDir = m.windDir; game.windSpeed = m.windSpeed;
+      if (normName(nm) !== normName(online.player)) { online.player = nm; api('POST', `/game/${online.code}/join`, { player: nm }).then(onlineState).catch(() => {}); saveOnline(); }
+      onlineScore();
+    }
+    startHole(0); }
 };
 document.querySelectorAll('.tee-btn').forEach(b => b.onclick = () => {
+  if (online.code) return onlineMsg('En una partida con amigos todos usan las salidas de quien la creó.');
   game.tee = +b.dataset.tee;
   document.querySelectorAll('.tee-btn').forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false'));
 });
+
+// ───────────────────────── Jugar con amigos (en línea, vía Netlify) ─────────────────────────
+// Solo se activa si el sitio tiene la API (/api); en otros lugares el juego sigue funcionando sin conexión.
+const online = { ok: false, code: null, meta: null, player: '', players: [], seen: {}, timer: 0 };
+const normName = n => String(n || '').trim().toLowerCase();
+async function api(method, path, body) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 8000);
+  try {
+    const r = await fetch('/api' + path, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, signal: ctl.signal, cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Sin conexión');
+    return j;
+  } finally { clearTimeout(t); }
+}
+function onlineMsg(t) { $('onlineMsg').textContent = t || ''; }
+function saveOnline() { store.set('golfitoPartida', online.code ? { code: online.code, player: online.player } : null); }
+function refreshOnlineBox() {
+  $('onlineIdle').hidden = !!online.code; $('onlineOn').hidden = !online.code; $('onlineCode').textContent = online.code || '';
+  $('friendsBtn').hidden = !online.code; if (!online.code) { $('friends').hidden = true; $('friendsBtn').setAttribute('aria-expanded', 'false'); }
+  if (online.code && online.meta) {
+    game.tee = online.meta.tee;
+    document.querySelectorAll('.tee-btn').forEach(o => o.setAttribute('aria-pressed', +o.dataset.tee === game.tee ? 'true' : 'false'));
+    onlineMsg(`${online.players.length} jugador${online.players.length === 1 ? '' : 'es'}: ${online.players.map(p => p.name).join(', ')} · salidas ${TEESETS[game.tee].name.toLowerCase()}`);
+  }
+}
+function onlineState(st) {
+  online.meta = st; const prev = online.players; online.players = st.players || [];
+  // Aviso cuando un amigo termina un hoyo
+  for (const p of online.players) {
+    const k = normName(p.name), n = p.scores.filter(v => v != null).length;
+    if (k !== normName(online.player) && online.seen[k] != null && n > online.seen[k] && game.state !== 'menu') {
+      const h = p.scores.length - 1, v = p.scores[h];
+      if (v != null) toast(`${p.name}: ${scoreName(v - HOLES[h].par, v).replace(/^¡|!$/g, '')} en el ${h + 1}`, 2600);
+    }
+    online.seen[k] = n;
+  }
+  if (prev !== online.players) { refreshOnlineBox(); renderFriends(); }
+}
+function friendsRows() {
+  return online.players.map(p => {
+    let tot = 0, par = 0, n = 0; p.scores.forEach((v, i) => { if (v != null) { tot += v; par += HOLES[i].par; n++; } });
+    return { name: p.name, tot, d: tot - par, n, me: normName(p.name) === normName(online.player) };
+  }).sort((a, b) => (b.n ? 0 : 1) - (a.n ? 0 : 1) || a.d - b.d || b.n - a.n);
+}
+function friendsTable() {
+  const rows = friendsRows();
+  let h = '<table class="sc"><tr class="hd"><th>Jugador</th><th>Hoyo</th><th>Golpes</th><th>Par</th></tr>';
+  rows.forEach(r => { h += `<tr><td class="nm"${r.me ? ' style="color:var(--flag)"' : ''}>${esc(r.name)}</td><td>${r.n}/9</td><td>${r.n ? r.tot : '·'}</td><td class="${r.d < 0 ? 'u' : r.d > 0 ? 'o' : ''}">${r.n ? fmtPar(r.d) : '·'}</td></tr>`; });
+  return h + '</table>';
+}
+function friendsCard() { return online.code ? `<div class="rank-h">Partida ${online.code}</div><div id="friendsLive">${friendsTable()}</div>` : ''; }
+function renderFriends() {
+  if (!online.code) return;
+  if (!$('friends').hidden) $('friends').innerHTML = `<div class="lbl">Partida ${online.code}</div>` + friendsTable();
+  const live = $('friendsLive'); if (live) live.innerHTML = friendsTable();
+}
+async function pollGame() {
+  clearTimeout(online.timer); if (!online.code) return;
+  if (!document.hidden) { try { onlineState(await api('GET', `/game/${online.code}`)); } catch (e) {} }
+  online.timer = setTimeout(pollGame, 5000);
+}
+async function enterGame(st, player) {
+  online.code = st.code; online.player = player; online.seen = {}; saveOnline(); onlineState(st); refreshOnlineBox(); pollGame();
+}
+function onlineScore() {
+  if (!online.code) return;
+  api('POST', `/game/${online.code}/score`, { player: online.player, scores: game.scores.slice(0, game.hole + 1).map(v => v ?? null) }).then(pollGame).catch(() => {});
+}
+function postRound() {
+  const r = { player: game.player, tee: game.tee, scores: game.scores.slice(), game: online.code };
+  const pend = store.get('golfitoPendientes', []); pend.push(r); store.set('golfitoPendientes', pend); flushRounds();
+}
+async function flushRounds() { // las rondas sin señal se mandan cuando vuelve la conexión
+  if (!online.ok) return;
+  const pend = store.get('golfitoPendientes', []);
+  while (pend.length) { try { await api('POST', '/round', pend[0]); pend.shift(); store.set('golfitoPendientes', pend); } catch (e) { break; } }
+}
+$('createBtn').onclick = async () => {
+  const nm = $('playerName').value.trim().slice(0, 24); if (!nm) { onlineMsg('Escribe tu nombre primero.'); $('playerName').focus(); return; }
+  onlineMsg('Creando partida…');
+  try { await enterGame(await api('POST', '/game', { player: nm, tee: game.tee }), nm); }
+  catch (e) { onlineMsg('No se pudo crear la partida: ' + e.message); }
+};
+$('joinBtn').onclick = async () => {
+  const nm = $('playerName').value.trim().slice(0, 24), code = $('codeIn').value.trim().toUpperCase();
+  if (!nm) { onlineMsg('Escribe tu nombre primero.'); $('playerName').focus(); return; }
+  if (!/^[A-Z]{4}$/.test(code)) { onlineMsg('El código tiene 4 letras.'); $('codeIn').focus(); return; }
+  onlineMsg('Entrando…');
+  try { await enterGame(await api('POST', `/game/${code}/join`, { player: nm }), nm); }
+  catch (e) { onlineMsg(e.message); }
+};
+$('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
+$('leaveBtn').onclick = () => { online.code = null; online.meta = null; online.players = []; clearTimeout(online.timer); saveOnline(); refreshOnlineBox(); onlineMsg(''); };
+$('shareBtn').onclick = async () => {
+  const text = `Juega conmigo en el Golfito La Huerta. Código de la partida: ${online.code}`, url = location.origin + location.pathname;
+  try { if (navigator.share) await navigator.share({ title: 'Golfito La Huerta', text, url }); else { await navigator.clipboard.writeText(`${text}\n${url}`); onlineMsg('Código copiado. Pégalo en WhatsApp.'); } } catch (e) {}
+};
+$('friendsBtn').onclick = () => {
+  const f = $('friends'); f.hidden = !f.hidden; $('friendsBtn').setAttribute('aria-expanded', String(!f.hidden)); renderFriends(); if (!f.hidden) pollGame();
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden && online.code) pollGame(); });
+api('GET', '/ping').then(async () => {
+  online.ok = true; flushRounds();
+  const saved = store.get('golfitoPartida', null);
+  if (saved && saved.code) { try { await enterGame(await api('GET', `/game/${saved.code}`), saved.player); } catch (e) { saveOnline(); } }
+  if (ovMode === 'start' && !$('overlay').hidden) $('onlineBox').hidden = false;
+  refreshOnlineBox();
+}).catch(() => {});
 
 // ───────────────────────── Interfaz ─────────────────────────
 let toastT = 0;
@@ -1381,7 +1519,7 @@ defineHole(0, 1); buildScene(0); placeBall(0, 0, true); aimAt(PIN.x, PIN.z);
 camPos.set(0, 2.2, 6); camLook.set(PIN.x * 0.3, 2, -60);
 drawCourseMap(0);
 requestAnimationFrame(frame);
-window.__golf = { trees: () => trees, PONDS: () => PONDS, terrain: () => terrainMesh, placeBall, readyForShot,  ball, game, CLUBS, flatCarry, shoot, H, surfAt, startHole, HOLES, COURSE, get PIN() { return PIN; }, get CENTER() { return CENTER; } };
+window.__golf = { finishShot, online: () => online, trees: () => trees, PONDS: () => PONDS, terrain: () => terrainMesh, placeBall, readyForShot,  ball, game, CLUBS, flatCarry, shoot, H, surfAt, startHole, HOLES, COURSE, get PIN() { return PIN; }, get CENTER() { return CENTER; } };
 })();
 </script>
 
