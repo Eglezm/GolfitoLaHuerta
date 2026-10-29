@@ -198,6 +198,8 @@ table.sc .u { color: var(--good); } table.sc .o { color: var(--danger); }
 // Densidad del aire en La Huerta (Puebla, ≈ 2158 m, ≈ 20 °C): ≈ 0,93 kg/m³ frente a 1,225 a nivel del mar.
 const G = 9.81, RHO = 0.93, BR = 0.021335, BM = 0.04593, BA = Math.PI * BR * BR;
 const CUP_R = 0.054, YD = 1.0936133;
+// Regla de la casa: bola parada dentro del círculo blanco (≈ 1 yarda del hoyo) = embocada con un golpe más
+const GIMME_R = 0.9144;
 // Superficies: rebote (e), fricción de deslizamiento (mu), resistencia a la rodadura (roll)
 const SURF = {
   TEE:     { name: 'Tee',     e: 0.50, mu: 0.50, roll: 0.16 },
@@ -761,6 +763,17 @@ function buildScene(holeIdx) {
       const st = new THREE.Mesh(stakeGeo, stakeMat); st.position.set(pt.x, H(pt.x, pt.z) + 0.5, pt.z); holeGroup.add(st);
     }
   }
+  { // Círculo blanco de 1 yarda alrededor del hoyo, pegado a la pendiente del green
+    const N = 72, w = 0.035, pos = [];
+    for (let k = 0; k < N; k++) for (const [a0, a1] of [[k / N, (k + 1) / N]]) {
+      const pt = (a, r) => { const x = PIN.x + Math.cos(a * Math.PI * 2) * r, z = PIN.z + Math.sin(a * Math.PI * 2) * r; return [x, H(x, z) + 0.012, z]; };
+      const A = pt(a0, GIMME_R - w), B = pt(a0, GIMME_R + w), C = pt(a1, GIMME_R + w), D = pt(a1, GIMME_R - w);
+      pos.push(...A, ...B, ...C, ...A, ...C, ...D);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const ringM = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xf4f4f0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+    holeGroup.add(ringM);
+  }
   const cup = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 20), new THREE.MeshBasicMaterial({ color: 0x0b0b0b }));
   cup.rotation.x = -Math.PI / 2; cup.position.set(PIN.x, PIN_Y + 0.012, PIN.z); holeGroup.add(cup);
   flag.position.set(PIN.x, PIN_Y, PIN.z);
@@ -915,7 +928,7 @@ function autoClub() {
   return pick;
 }
 function startHole(i) {
-  game.hole = i; game.strokes = 0; game.holed = false; $('overlay').hidden = true;
+  game.hole = i; game.strokes = 0; game.holed = false; game.gimme = false; $('overlay').hidden = true;
   const tee = defineHole(i, game.tee);
   buildScene(i);
   // Viento de la ronda (rumbo real) con variación por hoyo; se pasa al marco local del hoyo
@@ -1070,6 +1083,9 @@ function scoreName(d, n) {
   return { '-3': 'Albatros', '-2': 'Eagle', '-1': 'Birdie', '0': 'Par', '1': 'Bogey', '2': 'Doble bogey', '3': 'Triple bogey' }[d] || ('+' + d);
 }
 function finishShot() {
+  if (!game.holed && ball.mode === 'rest' && Math.hypot(ball.p.x - PIN.x, ball.p.z - PIN.z) < GIMME_R) {
+    game.strokes++; game.holed = true; game.gimme = true; toast('Dentro del círculo · +1 golpe', 1800);
+  }
   if (game.holed) {
     game.state = 'done';
     game.scores[game.hole] = game.strokes;
@@ -1173,7 +1189,7 @@ function showHoleResult() {
   if (ovMode !== 'play') return; // salió al inicio mientras la bola rodaba
   const i = game.hole, last = i === HOLES.length - 1, c = scorecardHTML(i);
   if (!last) {
-    showOverlay({ eyebrow: `Hoyo ${i + 1} terminado`, title: scoreName(game.strokes - holeSpec.par, game.strokes), text: `${game.strokes} golpe${game.strokes > 1 ? 's' : ''} · par ${holeSpec.par}`, button: `Ir al hoyo ${i + 2}`, card: c.html + friendsCard(), map: i + 1 });
+    showOverlay({ eyebrow: `Hoyo ${i + 1} terminado`, title: scoreName(game.strokes - holeSpec.par, game.strokes), text: `${game.strokes} golpe${game.strokes > 1 ? 's' : ''} · par ${holeSpec.par}${game.gimme ? ' · dentro del círculo' : ''}`, button: `Ir al hoyo ${i + 2}`, card: c.html + friendsCard(), map: i + 1 });
   } else {
     const d = c.tot - c.totPar;
     saveRound(); postRound(); ovMode = 'start';
