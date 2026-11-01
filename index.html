@@ -267,12 +267,17 @@ const HOLES = [
     ponds: [{ fromTee: 0, off: 14, rx: 7, rz: 9 }],
     bunkers: [{ g: 1, dx: -2, dz: -14, rx: 8, rz: 3.5 }, { g: 1, dx: -11.5, dz: 2, rx: 2.5, rz: 4 }] },
   // Hoyo 6 (según Enrique y su foto): dogleg a la derecha con calle entre árboles a ambos lados; pasada la
-  // línea de árboles es fuera de límites. Desde el quiebre, un lago a la derecha de la línea tapa casi todo:
+  // línea de árboles es fuera de límites. Después del quiebre, un lago a la derecha de la línea tapa casi todo:
   // solo quedan 3-4 m por la izquierda antes de los árboles, aunque lo normal es volarlo. Tras el lago, calle
   // (antes era un búnker enorme). Green que sube de la entrada al fondo; 5-6 m detrás ya es fuera de límites.
   { par: 4, hcp: 2,  yd: [316, 326, 336], pin: [0, 2], slope: [0.005, 0.035], wide: 12, ob: 22, backOB: 5.5,
-    ponds: [{ afterCorner: 16, off: 4, rx: 12, rz: 10 }],
-    landmarks: [30, 38, 46, 54, 62].map((y, k) => ({ toGreen: y, off: -7 - (k % 2), h: 12 + k, r: 3.2 })) },
+    // Fotos del hoyo 6: la primera parte es un pasillo largo de cedros; en el quiebre se abre una explanada con el
+    // hotel al fondo. El lago queda a la derecha, unos 50 m después del quiebre (no pegado a él), con orilla de
+    // piedra; detrás del green está el Caddy House (naranja) y la salida del hoyo 1.
+    ponds: [{ afterCorner: 50, off: 4, rx: 12, rz: 10, stone: true }],
+    landmarks: [30, 38, 46, 54, 62].map((y, k) => ({ toGreen: y, off: -7 - (k % 2), h: 12 + k, r: 3.2 })),
+    buildings: [{ name: 'hotel', wall: 0xe6e2d8, afterCorner: 0, off: -40, w: 44, l: 12, h: 10 },
+                { name: 'Caddy House', wall: 0xf7a94e, toGreen: -18, off: 0, w: 7, l: 16, h: 4.5 }] },
   // Hoyo 7 (según Enrique y su foto): estrecho, sales de una pequeña meseta; búnker delante y otro a la
   // izquierda del green; green que sube de la entrada al fondo con una pequeña caída detrás; a la derecha
   // del green el terreno cae hacia los árboles y el fuera de límites, que está en el límite del arbolado.
@@ -734,7 +739,7 @@ function buildScene(holeIdx) {
   for (const bd of BUILDINGS.filter(b => b.wall)) { // edificios macizos (casa, hotel): muros con ventanas y azotea
     const w = bd.x1 - bd.x0, l = bd.z1 - bd.z0, cx = (bd.x0 + bd.x1) / 2, cz = (bd.z0 + bd.z1) / 2;
     const tex = facadeTexture(bd.wall, Math.max(1, Math.round(bd.h / 3)));
-    const side = (span) => { const t = tex.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, Math.round(span / 4)), 1); return new THREE.MeshLambertMaterial({ map: t }); };
+    const side = (span) => { const t = tex.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, Math.round(span / 4)), 1); return new THREE.MeshLambertMaterial({ map: t, emissive: new THREE.Color(bd.wall).multiplyScalar(0.3) }); }; // fachada en sombra sin que se vea café
     const top = new THREE.MeshLambertMaterial({ color: new THREE.Color(bd.wall).multiplyScalar(0.7) });
     const box = new THREE.Mesh(new THREE.BoxGeometry(w, bd.h, l), [side(l), side(l), top, top, side(w), side(w)]);
     box.position.set(cx, bd.y0 + bd.h / 2, cz); holeGroup.add(box);
