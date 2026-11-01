@@ -273,11 +273,13 @@ const HOLES = [
   { par: 4, hcp: 2,  yd: [316, 326, 336], pin: [0, 2], slope: [0.005, 0.035], wide: 12, ob: 22, backOB: 5.5,
     // Fotos del hoyo 6: la primera parte es un pasillo largo de cedros; en el quiebre se abre una explanada con el
     // hotel al fondo. El lago queda a la derecha, unos 50 m después del quiebre (no pegado a él), con orilla de
-    // piedra; detrás del green está el Caddy House (naranja) y la salida del hoyo 1.
+    // piedra; detrás del green hay un espacio, luego la salida del hoyo 1 y después el Caddy House (naranja).
     ponds: [{ afterCorner: 50, off: 4, rx: 12, rz: 10, stone: true }],
     landmarks: [30, 38, 46, 54, 62].map((y, k) => ({ toGreen: y, off: -7 - (k % 2), h: 12 + k, r: 3.2 })),
     buildings: [{ name: 'hotel', wall: 0xe6e2d8, afterCorner: 0, off: -40, w: 44, l: 12, h: 10 },
-                { name: 'Caddy House', wall: 0xf7a94e, toGreen: -18, off: 0, w: 7, l: 16, h: 4.5 }] },
+                { name: 'Caddy House', wall: 0xf7a94e, toGreen: -64, off: 0, w: 7, l: 16, h: 4.5 }],
+    // Detrás del green: un espacio abierto, la salida del hoyo 1 (~48 m del green, según sus coordenadas) y luego el Caddy House
+    clearings: [{ toGreen: -38, off: 0, w: 46, l: 26 }] },
   // Hoyo 7 (según Enrique y su foto): estrecho, sales de una pequeña meseta; búnker delante y otro a la
   // izquierda del green; green que sube de la entrada al fondo con una pequeña caída detrás; a la derecha
   // del green el terreno cae hacia los árboles y el fuera de límites, que está en el límite del arbolado.
