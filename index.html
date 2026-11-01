@@ -254,7 +254,7 @@ const HOLES = [
     // y por la derecha hay unos 7 m de pasto para entrar rodando al green.
     ponds: [{ g: 1, dx: -6, dz: -20, rx: 8, rz: 7.5, stone: true }],
     landmarks: [{ name: 'Plátano', palm: true, g: 1, dx: -6, dz: -11.5, h: 3.5, r: 1.6 }],
-    buildings: [{ name: 'palapa', wall: 0xd9c9a8, roof: 0xa4553a, toGreen: -14, off: 15, w: 5, l: 5, h: 3 }] },
+    buildings: [{ name: 'palapa', wall: 0xd9c9a8, roof: 0xa4553a, g: 1, dx: 15, dz: 14, w: 5, l: 5, h: 3 }] },
   // Hoyo 4 (según Enrique y su foto): sales de una pequeña meseta; un lago ancho cubre todo el frente
   // y hay que cruzarlo por fuerza; el green empieza unos 2 m después del agua. Detrás del green, un búnker
   // metido en una pendiente que sube (backDrop negativo = subida), del que cuesta salir.
@@ -277,9 +277,9 @@ const HOLES = [
     ponds: [{ afterCorner: 50, off: 4, rx: 12, rz: 10, stone: true }],
     landmarks: [30, 38, 46, 54, 62].map((y, k) => ({ toGreen: y, off: -7 - (k % 2), h: 12 + k, r: 3.2 })),
     buildings: [{ name: 'hotel', wall: 0xe6e2d8, afterCorner: 0, off: -40, w: 44, l: 12, h: 10 },
-                { name: 'Caddy House', wall: 0xf7a94e, toGreen: -64, off: 0, w: 7, l: 16, h: 4.5 }],
+                { name: 'Caddy House', wall: 0xf7a94e, g: 1, dx: 0, dz: 60, w: 7, l: 16, h: 4.5 }],
     // Detrás del green: un espacio abierto, la salida del hoyo 1 (~48 m del green, según sus coordenadas) y luego el Caddy House
-    clearings: [{ toGreen: -38, off: 0, w: 46, l: 26 }] },
+    clearings: [{ g: 1, dx: 0, dz: 38, w: 46, l: 26 }] },
   // Hoyo 7 (según Enrique y su foto): estrecho, sales de una pequeña meseta; búnker delante y otro a la
   // izquierda del green; green que sube de la entrada al fondo con una pequeña caída detrás; a la derecha
   // del green el terreno cae hacia los árboles y el fuera de límites, que está en el límite del arbolado.
@@ -464,10 +464,11 @@ function defineHole(i, teeSet) {
   const gp = (dx, dz) => ({ x: gx + GR.x * dx + GF.x * dz, z: gz + GR.z * dx + GF.z * dz });
   const sp = (s, off) => pointAt(back + s * L, off);
     const sOf = o => o.afterCorner != null ? back + COURSE[i].legA + o.afterCorner : o.fromTee != null ? back + o.fromTee / YD : back + L - o.toGreen / YD;
-    CLEARINGS = (holeSpec.clearings || []).map(o => { const c = pointAt(sOf(o), o.off); return { x0: c.x - o.w / 2, x1: c.x + o.w / 2, z0: c.z - o.l / 2, z1: c.z + o.l / 2 }; });
+    CLEARINGS = (holeSpec.clearings || []).map(o => { const c = o.g ? gp(o.dx, o.dz) : pointAt(sOf(o), o.off); return { x0: c.x - o.w / 2, x1: c.x + o.w / 2, z0: c.z - o.l / 2, z1: c.z + o.l / 2 }; });
     LANDMARKS = (holeSpec.landmarks || []).map(o => Object.assign(o.g ? gp(o.dx, o.dz) : pointAt(sOf(o), o.off), o));
     // Construcciones (solo en hoyos rectos: ejes alineados con el hoyo)
-    BUILDINGS = (holeSpec.buildings || []).map(o => { const c = pointAt(sOf(o), o.off), y0 = baseH(c.x, c.z);
+    BUILDINGS = (holeSpec.buildings || []).map(o => { const c = o.g ? gp(o.dx, o.dz) : pointAt(sOf(o), o.off), // g: respecto al green (más allá del final del hoyo pointAt se queda en el green)
+      y0 = baseH(c.x, c.z);
       return Object.assign({ x0: c.x - o.w / 2, x1: c.x + o.w / 2, z0: c.z - o.l / 2, z1: c.z + o.l / 2, y0, y1: y0 + o.h }, o); });
   const place = o => Object.assign(o.g ? gp(o.dx, o.dz) : o.s != null ? sp(o.s, o.off) : pointAt(sOf(o), o.off), { rx: o.rx, rz: o.rz });
   PIN = gp(holeSpec.pin[0], holeSpec.pin[1]);
@@ -1601,7 +1602,7 @@ defineHole(0, 1); buildScene(0); placeBall(0, 0, true); aimAt(PIN.x, PIN.z);
 camPos.set(0, 2.2, 6); camLook.set(PIN.x * 0.3, 2, -60);
 drawCourseMap(0);
 requestAnimationFrame(frame);
-window.__golf = { finishShot, online: () => online, trees: () => trees, PONDS: () => PONDS, terrain: () => terrainMesh, placeBall, readyForShot,  ball, game, CLUBS, flatCarry, shoot, H, surfAt, startHole, HOLES, COURSE, get PIN() { return PIN; }, get CENTER() { return CENTER; } };
+window.__golf = { BUILDINGS: () => BUILDINGS, get GREEN() { return GREEN; }, finishShot, online: () => online, trees: () => trees, PONDS: () => PONDS, terrain: () => terrainMesh, placeBall, readyForShot,  ball, game, CLUBS, flatCarry, shoot, H, surfAt, startHole, HOLES, COURSE, get PIN() { return PIN; }, get CENTER() { return CENTER; } };
 })();
 </script>
 
